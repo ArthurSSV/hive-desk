@@ -3,7 +3,6 @@ import { dayKey } from "@/lib/engine";
 import type { traderBundle } from "@/lib/data";
 import { saveJournal, syncMe } from "@/app/actions";
 import { EquityChart, Gauge, PhaseTag, Pill, cls, fmtD, sg, usd, type Day } from "./ui";
-import MetaMask from "./MetaMask";
 import DealsHistory from "./DealsHistory";
 
 type B = Awaited<ReturnType<typeof traderBundle>>;
@@ -84,7 +83,6 @@ export default function TraderView({ b, mode }: { b: B; mode: "self" | "admin" }
           )}
           <section className="panel"><div className="ph"><h2>Подключения</h2>{self && <Link href="/connect" className="fine">изменить</Link>}</div>
             <div className="conn"><div className="row"><div><b>cTrader</b><span>Счёт #{acc.trader_login || acc.ctid_trader_account_id} · только чтение</span></div><span className="ok">Подключён</span></div></div>
-            <div style={{ marginTop: 10 }}>{self ? <MetaMask wallet={profile?.wallet ?? null} /> : <div className="conn"><div className="row"><div><b>MetaMask</b><span className="mono">{profile?.wallet || "не подключён"}</span></div></div></div>}</div>
             {chain.length > 0 && <div className="events" style={{ marginTop: 12 }}>{chain.map((e: any) => <div key={e.tx_hash}><span>{e.kind === "pay" ? "Оплата челленджа" : "Выплата USDC"}</span><span className="mono">{fmtD(e.ts.slice(0, 10))} · {usd(e.amount)}</span></div>)}</div>}
           </section>
         </div>

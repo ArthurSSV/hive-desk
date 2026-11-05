@@ -1,6 +1,5 @@
 import { requireUser } from "@/lib/supabase";
 import { activateAccount } from "../actions";
-import MetaMask from "@/components/MetaMask";
 import { PHASE_LABEL } from "@/lib/rules";
 import { usd } from "@/components/ui";
 
@@ -14,7 +13,7 @@ export default async function Connect({ searchParams }: { searchParams: { error?
       <div><h1>Подключение счёта</h1><p className="sub">Доступ только на чтение: мы видим баланс и сделки, но не можем торговать.</p></div>
       {searchParams.error && <div className="w l-red notice">{searchParams.error}</div>}
       <section className="panel" style={{ display: "grid", gap: 12 }}>
-        <div className="ph"><h2>1. cTrader</h2></div>
+        <div className="ph"><h2>cTrader</h2></div>
         <a className="btn" href="/api/ctrader/connect">{accounts?.length ? "Обновить доступ cTrader" : "Войти через cTrader ID"}</a>
         {accounts?.length ? <>
           <p className="fine" style={{ margin: 0 }}>Выберите счёт челленджа, который нужно отслеживать. Начальный баланс — размер счёта, например 50000. Если оставить пустым, он посчитается по истории сделок.</p>
@@ -35,10 +34,6 @@ export default async function Connect({ searchParams }: { searchParams: { error?
             </div>
           ))}
         </> : null}
-      </section>
-      <section className="panel" style={{ display: "grid", gap: 12 }}>
-        <div className="ph"><h2>2. MetaMask</h2><span className="fine">можно позже</span></div>
-        <MetaMask wallet={profile.wallet} />
       </section>
       {accounts?.some((a: any) => a.active) && <a className="btn ghost" href="/dashboard">Перейти в кабинет</a>}
     </div>

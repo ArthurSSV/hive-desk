@@ -22,14 +22,6 @@ export async function saveJournal(fd: FormData) {
   revalidatePath("/dashboard");
 }
 
-export async function saveWallet(wallet: string) {
-  const { sb, profile } = await requireUser();
-  if (!/^0x[0-9a-fA-F]{40}$/.test(wallet)) return { error: "Неверный адрес кошелька" };
-  await sb.from("profiles").update({ wallet: wallet.toLowerCase() }).eq("id", profile.id);
-  revalidatePath("/dashboard"); revalidatePath("/connect");
-  return { ok: true };
-}
-
 export async function activateAccount(fd: FormData) {
   const { sb, profile } = await requireUser();
   const id = Number(fd.get("id"));
