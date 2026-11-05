@@ -84,7 +84,7 @@ const ICONS: Record<string, JSX.Element> = {
   target: <><circle cx="12" cy="12" r="8" /><circle cx="12" cy="12" r="4" /><path d="M12 12l7-7" /></>,
 };
 
-export function Gauge({ k, v, sub, pct, col, note, icon }: { k: string; v: string; sub?: string; pct: number; col: string; note: string; icon: keyof typeof ICONS }) {
+export function Gauge({ k, v, sub, pct, col, note, icon }: { k: string; v: string; sub?: string; pct: number; col: string; note: React.ReactNode; icon: keyof typeof ICONS }) {
   return (
     <div className="panel gauge">
       <div className="gicon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{ICONS[icon]}</svg></div>

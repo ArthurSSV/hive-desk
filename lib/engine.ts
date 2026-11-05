@@ -158,6 +158,8 @@ export function summarize(days: (Pick<DayStat, "traded" | "pnl_pct" | "total_pct
     curDD: last ? Math.max(0, -Number(last.total_pct)) : 0,
     tradingDays: traded.length,
     profitDays: traded.filter(d => Number(d.pnl_pct) >= profitDayPct).length,
+    winDays: traded.filter(d => Number(d.pnl_pct) > 0).length,
+    lossDays: traded.filter(d => Number(d.pnl_pct) < 0).length,
     winRate: traded.length ? Math.round((traded.filter(d => Number(d.pnl_pct) > 0).length / traded.length) * 100) : 0,
     best: traded.length ? Math.max(...traded.map(d => Number(d.pnl_pct))) : 0,
     worst: traded.length ? Math.min(...traded.map(d => Number(d.pnl_pct))) : 0,
