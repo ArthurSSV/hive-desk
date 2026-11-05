@@ -2,6 +2,7 @@
 import assert from "node:assert/strict";
 import { computeAccount, summarize } from "../lib/engine";
 import { DEFAULT_RULES } from "../lib/rules";
+import { buildPositions, minEquityByDay } from "../lib/equity";
 
 const R = { ...DEFAULT_RULES, tz: "UTC", minDays: 4 };
 const deal = (day: string, profit: number, close = true, lots = 1) => ({ exec_ts: `${day}T10:00:00Z`, is_close: close, net_profit: profit, volume: lots * 100 * 100000 });
@@ -44,5 +45,18 @@ const s = summarize(r.days); assert.equal(s.tradingDays, 1); assert.equal(s.tota
 // до подключения отчёт не требуется
 r = computeAccount({ phase: 1, initialBalance: 10000, rules: R, startDay: "2026-11-05", today: "2026-11-05", deals: [...pair("2026-11-02", 10), ...pair("2026-11-03", 10)], journal: [] });
 assert.ok(!r.days.some(d => d.flags.some(f => f.t === "Нет отчёта 2 дня")));
+
+// 7. Эквити: SELL 0.2 XAU (20 унций) по 4000, цена доходила до 4020 → плавающий −$400 на счёте $50 000
+const xd = [
+  { position_id: 1, symbol_id: 41, side: "sell", volume: 2000, exec_ts: "2026-11-04T10:00:00Z", is_close: false, price: 4000, entry_price: null, conv: null, net_profit: 0 },
+  { position_id: 1, symbol_id: 41, side: "buy", volume: 2000, exec_ts: "2026-11-04T10:05:00Z", is_close: true, price: 3990, entry_price: 4000, conv: 1, net_profit: 200 },
+];
+const t0 = Date.parse("2026-11-04T10:00:00Z") / 60000;
+const bars = new Map([[1, [[t0, 4000, 4005, 3998, 4004], [t0 + 1, 4004, 4020, 4003, 4015], [t0 + 2, 4015, 4016, 3990, 3990]]]]);
+const me = minEquityByDay({ initial: 50000, deals: xd, positions: buildPositions(xd), bars, tz: "UTC" });
+assert.equal(me.get("2026-11-04"), 49600);
+r = computeAccount({ phase: 1, initialBalance: 50000, rules: R, startDay: "2026-11-04", today: "2026-11-04", journal: [], minEquity: me,
+  deals: xd.map(d => ({ exec_ts: d.exec_ts, is_close: d.is_close, net_profit: d.net_profit, volume: d.volume })) });
+assert.equal(r.days[0].dd_pct, 0.8); assert.equal(r.days[0].day_loss_pct, 0.8); assert.equal(r.days[0].total_pct, 0.4);
 
 console.log("engine: все проверки пройдены");

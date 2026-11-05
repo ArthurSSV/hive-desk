@@ -2,6 +2,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { CTraderConnection, mapDeal, refreshToken } from "./ctrader";
 import { computeAccount, dayKey } from "./engine";
+import { buildPositions, chartWindow, minEquityByDay, type RawDeal } from "./equity";
 import { normalizeRules, PHASE_LABEL, type Rules } from "./rules";
 import { sendTelegram } from "./telegram";
 
@@ -42,7 +43,7 @@ async function pullDeals(sb: SupabaseClient, acc: Account) {
 
     const { data: last } = await sb.from("deals").select("exec_ts").eq("account_id", acc.id).order("exec_ts", { ascending: false }).limit(1);
     // Старые сделки без лота/символа перезагружаем целиком (один раз после обновления)
-    const { count: missing } = await sb.from("deals").select("deal_id", { count: "exact", head: true }).eq("account_id", acc.id).is("lots", null);
+    const { count: missing } = await sb.from("deals").select("deal_id", { count: "exact", head: true }).eq("account_id", acc.id).or("lots.is.null,and(is_close.eq.true,conv.is.null)");
     const from = last?.[0] && !missing ? new Date(last[0].exec_ts).getTime() - 3600_000 : Date.now() - HISTORY_DAYS * 86400_000;
     const raw = await c.deals(acc.ctid_trader_account_id, from, Date.now());
     const mapped = raw
@@ -63,6 +64,7 @@ async function pullDeals(sb: SupabaseClient, acc: Account) {
       const { error } = await sb.from("deals").upsert(rows.slice(i, i + 500), { onConflict: "deal_id" });
       if (error) throw error;
     }
+    await pullBars(sb, c, acc);
     // Если начальный баланс не задан — восстанавливаем его по текущему балансу и сумме всех сделок
     let initial = acc.initial_balance;
     if (initial == null) {
@@ -75,21 +77,48 @@ async function pullDeals(sb: SupabaseClient, acc: Account) {
   } finally { c.close(); }
 }
 
+const DEAL_COLS = "position_id,symbol_id,symbol,side,volume,exec_ts,is_close,price,entry_price,conv,net_profit,lots";
+
+/** Догружает свечи для новых и ещё открытых позиций (для графика и эквити). */
+async function pullBars(sb: SupabaseClient, c: CTraderConnection, acc: Account) {
+  const { data: deals } = await sb.from("deals").select(DEAL_COLS).eq("account_id", acc.id).order("exec_ts");
+  const positions = buildPositions((deals || []) as RawDeal[]);
+  const { data: have } = await sb.from("position_bars").select("position_id,closed").eq("account_id", acc.id);
+  const done = new Set((have || []).filter(h => h.closed).map(h => Number(h.position_id)));
+  const sym = new Map((deals || []).map((d: any) => [Number(d.position_id), d.symbol]));
+  for (const p of positions) {
+    if (done.has(p.id)) continue;
+    const w = chartWindow(p);
+    const bars = await c.trendbars(acc.ctid_trader_account_id, p.symbolId, w.period, Math.floor(w.from), Math.floor(w.to));
+    const { error } = await sb.from("position_bars").upsert({
+      account_id: acc.id, position_id: p.id, user_id: acc.user_id, symbol: sym.get(p.id) ?? null,
+      period: w.label, bars, closed: p.closeMs != null && w.to >= (p.closeMs ?? 0), updated_at: new Date().toISOString(),
+    });
+    if (error) throw error;
+  }
+}
+
 /** Пересчитывает дневную статистику и статус счёта по уже сохранённым сделкам. */
 export async function recompute(sb: SupabaseClient, acc: Account, rules: Rules, initial: number) {
-  const { data: deals } = await sb.from("deals").select("exec_ts,is_close,net_profit,volume,lots").eq("account_id", acc.id).order("exec_ts");
+  const { data: deals } = await sb.from("deals").select(DEAL_COLS).eq("account_id", acc.id).order("exec_ts");
   const { data: journal } = await sb.from("journal").select("day,mood,plan").eq("user_id", acc.user_id);
+  const { data: pb } = await sb.from("position_bars").select("position_id,bars").eq("account_id", acc.id);
   const today = dayKey(new Date(), rules.tz);
+  const minEquity = minEquityByDay({
+    initial, deals: (deals || []) as RawDeal[], positions: buildPositions((deals || []) as RawDeal[]),
+    bars: new Map((pb || []).map((b: any) => [Number(b.position_id), b.bars as number[][]])), tz: rules.tz,
+  });
   const res = computeAccount({
     phase: acc.phase, initialBalance: initial, deals: (deals || []) as any, journal: (journal || []) as any,
-    rules, startDay: dayKey(new Date(acc.created_at), rules.tz), today,
+    rules, startDay: dayKey(new Date(acc.created_at), rules.tz), today, minEquity,
   });
   await sb.from("daily_stats").delete().eq("account_id", acc.id);
   const rows = res.days.map(d => ({
     account_id: acc.id, user_id: acc.user_id, day: d.day, pnl: d.pnl, pnl_pct: d.pnl_pct, total_pct: d.total_pct,
     end_balance: d.end_balance, trades: d.trades, max_lot: d.max_lot, level: d.level, flags: d.flags, breach: d.breach,
+    day_loss_pct: d.day_loss_pct, dd_pct: d.dd_pct, min_equity: minEquity.get(d.day) ?? null,
   }));
-  for (let i = 0; i < rows.length; i += 500) await sb.from("daily_stats").insert(rows.slice(i, i + 500));
+  for (let i = 0; i < rows.length; i += 500) { const { error } = await sb.from("daily_stats").insert(rows.slice(i, i + 500)); if (error) throw error; }
   await sb.from("ctrader_accounts").update({ status: res.status, status_day: res.statusDay }).eq("id", acc.id);
   return { res, today, wasStatus: acc.status };
 }

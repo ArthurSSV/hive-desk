@@ -23,7 +23,7 @@ export default function TraderView({ b, mode }: { b: B; mode: "self" | "admin" }
   const failed = acc.status === "failed";
   const last: any = days[days.length - 1];
   const level = failed ? "failed" : last?.level || "green";
-  const leftDaily = R.daily + Math.min(0, m.today), leftMax = R.max - m.curDD;
+  const leftDaily = R.daily - m.todayLoss, leftMax = R.max - m.maxDD;
   const warns: { lv: string; t: string }[] = [];
   if (failed) warns.push({ lv: "failed", t: "Счёт закрыт по нарушению лимита." });
   else if (acc.status === "passed") warns.push({ lv: "green", t: "Цель фазы выполнена. Когда получите новый счёт, подключите его на странице подключения." });
@@ -48,8 +48,8 @@ export default function TraderView({ b, mode }: { b: B; mode: "self" | "admin" }
 
       <div className="gauges">
         <Gauge icon="days" k="Прибыльные дни" v={`${m.profitDays} дн.`} sub={`Цель: ${R.minDays} дн.`} pct={(m.profitDays / R.minDays) * 100} col="var(--gold)" note={`День считается прибыльным от +${R.profitDayPct}% · торговых дней ${m.tradingDays}`} />
-        <Gauge icon="daily" k="Дневной убыток" v={failed ? "—" : `${Math.max(0, -m.today).toFixed(2)}%`} sub={`Допуск: ${R.daily}%`} pct={(Math.max(0, -m.today) / R.daily) * 100} col={-m.today >= R.redDaily ? "var(--red)" : "var(--gold)"} note={failed ? "Счёт закрыт" : `Запас ${leftDaily.toFixed(2)}% · ${usd((init * leftDaily) / 100)}`} />
-        <Gauge icon="max" k="Общая просадка" v={`${m.maxDD.toFixed(2)}%`} sub={`Допуск: ${R.max}%`} pct={(m.maxDD / R.max) * 100} col={m.maxDD >= R.redDD ? "var(--red)" : "var(--red)"} note={`Сейчас ${m.curDD.toFixed(2)}% от старта фазы`} />
+        <Gauge icon="daily" k="Дневной убыток" v={failed ? "—" : `${m.todayLoss.toFixed(2)}%`} sub={`Допуск: ${R.daily}%`} pct={(m.todayLoss / R.daily) * 100} col={m.todayLoss >= R.redDaily ? "var(--red)" : "var(--gold)"} note={failed ? "Счёт закрыт" : `Запас ${leftDaily.toFixed(2)}% · ${usd((init * leftDaily) / 100)}`} />
+        <Gauge icon="max" k="Общая просадка" v={`${m.maxDD.toFixed(2)}%`} sub={`Допуск: ${R.max}%`} pct={(m.maxDD / R.max) * 100} col={m.maxDD >= R.redDD ? "var(--red)" : "var(--red)"} note="С учётом плавающего убытка открытых позиций" />
         {target != null
           ? <Gauge icon="target" k="Цель прибыли" v={`${sg(m.total)}%`} sub={`Цель: ${target}%`} pct={(m.total / target) * 100} col="var(--green)" note={m.total >= target ? "Цель достигнута" : `Осталось ${(target - m.total).toFixed(2)}% · ${usd((init * (target - m.total)) / 100)}`} />
           : <Gauge icon="target" k="Funded-счёт" v={`${sg(m.total)}%`} pct={100} col="var(--green)" note="Прибыль с начала funded" />}
@@ -90,7 +90,7 @@ export default function TraderView({ b, mode }: { b: B; mode: "self" | "admin" }
         </div>
       </div>
 
-      <DealsHistory deals={b.deals} login={acc.trader_login || acc.ctid_trader_account_id} initial={init} />
+      <DealsHistory deals={b.deals} login={acc.trader_login || acc.ctid_trader_account_id} initial={init} accountId={acc.id} />
 
       <section className="panel"><div className="ph"><h2>История по дням</h2></div>
         <div className="tablewrap"><table className="daytbl"><thead><tr><th>Дата</th><th className="n">P&amp;L дня</th><th className="n">Итог фазы</th><th className="n">Сделки</th><th className="n">Макс. лот</th><th className="n">Настр.</th><th>План</th><th>Светофор</th></tr></thead>

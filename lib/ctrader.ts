@@ -9,6 +9,7 @@ export const PT = {
   SYMBOLS_LIST_REQ: 2114, SYMBOLS_LIST_RES: 2115,
   SYMBOL_BY_ID_REQ: 2116, SYMBOL_BY_ID_RES: 2117,
   TRADER_REQ: 2121, TRADER_RES: 2122,
+  TRENDBARS_REQ: 2137, TRENDBARS_RES: 2138,
   DEAL_LIST_REQ: 2133, DEAL_LIST_RES: 2134,
   OA_ERROR: 2142,
   ACCOUNTS_BY_TOKEN_REQ: 2149, ACCOUNTS_BY_TOKEN_RES: 2150,
@@ -117,6 +118,15 @@ export class CTraderConnection {
     }
     return out;
   }
+  /** Свечи символа: [минута UTC, open, high, low, close]. period: M1=1, M5=5, M15=7, H1=9. */
+  async trendbars(ctid: number, symbolId: number, period: number, fromMs: number, toMs: number): Promise<number[][]> {
+    const r = await this.limited(() => this.request(PT.TRENDBARS_REQ, { ctidTraderAccountId: ctid, symbolId, period, fromTimestamp: fromMs, toTimestamp: toMs }, PT.TRENDBARS_RES));
+    const k = 100000; // цены свечей — в 1/100000 единицы
+    return (r.trendbar || []).map((b: any) => {
+      const low = Number(b.low || 0);
+      return [Number(b.utcTimestampInMinutes), (low + Number(b.deltaOpen || 0)) / k, (low + Number(b.deltaHigh || 0)) / k, low / k, (low + Number(b.deltaClose || 0)) / k];
+    }).sort((a: number[], b: number[]) => a[0] - b[0]);
+  }
   /** История сделок; cTrader отдаёт максимум неделю за запрос, поэтому идём окнами. */
   async deals(ctid: number, fromMs: number, toMs: number): Promise<any[]> {
     const WEEK = 7 * 24 * 3600 * 1000;
@@ -164,6 +174,7 @@ export function mapDeal(d: any, traderMoneyDigits: number) {
     volume: d.filledVolume != null ? Number(d.filledVolume) : d.volume != null ? Number(d.volume) : null,
     price: d.executionPrice != null ? Number(d.executionPrice) : null,
     entry_price: cp?.entryPrice != null ? Number(cp.entryPrice) : null,
+    conv: cp?.quoteToDepositConversionRate != null ? Number(cp.quoteToDepositConversionRate) : null,
     exec_ts: new Date(Number(d.executionTimestamp || d.createTimestamp)).toISOString(),
     is_close: isClose,
     net_profit: Math.round(net * 100) / 100,

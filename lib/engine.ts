@@ -19,6 +19,8 @@ export type DayStat = {
   mood: number | null;
   plan: boolean | null;
   checkin: boolean;
+  day_loss_pct: number; // худший убыток за день с учётом плавающего, % от начального
+  dd_pct: number;       // макс. просадка от начального баланса с учётом плавающего, %
   tracked: boolean; // день после подключения к Hive Desk — только для них ждём отчёт
   breach: "daily" | "max" | null;
   level: Level;
@@ -57,6 +59,8 @@ export function computeAccount(opts: {
   rules: Rules;
   startDay: string;
   today: string;
+  /** Минимальное эквити ($) внутри каждого дня с учётом открытых позиций. */
+  minEquity?: Map<string, number>;
 }): EngineResult {
   const { phase, initialBalance: init, rules: R, today } = opts;
   const byDay = new Map<string, DealRow[]>();
@@ -75,6 +79,7 @@ export function computeAccount(opts: {
   let status: EngineResult["status"] = "active";
   let statusDay: string | null = null;
   let profitDays = 0;
+  let ddMax = 0;
   const target = phase === 1 ? R.p1 : phase === 2 ? R.p2 : null;
 
   for (const day of calendar) {
@@ -83,7 +88,10 @@ export function computeAccount(opts: {
     const opens = list.filter(d => !d.is_close);
     const traded = list.length > 0;
 
+    const dayStart = bal;
     bal += pnl;
+    const low = Math.min(dayStart, bal, opts.minEquity?.get(day) ?? Infinity);
+    ddMax = Math.max(ddMax, ((init - low) / init) * 100);
     const j = jmap.get(day);
     const s: DayStat = {
       day, traded,
@@ -96,11 +104,13 @@ export function computeAccount(opts: {
       mood: j?.mood ?? null,
       plan: j?.plan ?? null,
       checkin: !!j,
+      day_loss_pct: r2(Math.max(0, ((dayStart - low) / init) * 100)),
+      dd_pct: r2(ddMax),
       tracked: day >= opts.startDay,
       breach: null, level: "green", flags: [],
     };
-    if (s.pnl_pct <= -R.daily) s.breach = "daily";
-    else if (s.total_pct <= -R.max) s.breach = "max";
+    if (s.day_loss_pct >= R.daily) s.breach = "daily";
+    else if (s.dd_pct >= R.max) s.breach = "max";
     if (s.pnl_pct >= R.profitDayPct) profitDays++;
     days.push(s);
     const f = flagsAt(days, days.length - 1, R);
@@ -114,12 +124,11 @@ export function computeAccount(opts: {
 export function flagsAt(days: DayStat[], j: number, R: Rules): { level: Level; flags: Flag[] } {
   const d = days[j];
   const f: Flag[] = [];
-  const minTotal = Math.min(0, ...days.slice(0, j + 1).map(x => x.total_pct));
   const prevTraded = days.slice(Math.max(0, j - 10), j).filter(x => x.traded);
   const avg = prevTraded.length ? prevTraded.reduce((a, x) => a + x.trades, 0) / prevTraded.length : 0;
   if (d.breach) f.push({ lv: "red", t: d.breach === "daily" ? "Нарушен дневной лимит" : "Нарушен общий лимит" });
-  if (!d.breach && d.pnl_pct <= -R.redDaily) f.push({ lv: "red", t: `Дневной убыток ${d.pnl_pct.toFixed(1)}%` });
-  if (!d.breach && -minTotal >= R.redDD) f.push({ lv: "red", t: `Просадка ${(-minTotal).toFixed(1)}% из ${R.max}%` });
+  if (!d.breach && d.day_loss_pct >= R.redDaily) f.push({ lv: "red", t: `Дневной убыток ${d.day_loss_pct.toFixed(1)}%` });
+  if (!d.breach && d.dd_pct >= R.redDD) f.push({ lv: "red", t: `Просадка ${d.dd_pct.toFixed(1)}% из ${R.max}%` });
   if (d.traded && avg > 0 && d.trades >= avg * 2 && d.trades >= 4) f.push({ lv: "red", t: `Овертрейдинг: ${d.trades} сделок при норме ${avg.toFixed(0)}` });
   const p = days[j - 1];
   if (d.plan === false && p && p.plan === false) f.push({ lv: "red", t: "2 дня подряд не по плану" });
@@ -135,7 +144,7 @@ export function flagsAt(days: DayStat[], j: number, R: Rules): { level: Level; f
 }
 
 /** Сводные показатели для экранов. */
-export function summarize(days: Pick<DayStat, "traded" | "pnl_pct" | "total_pct" | "trades" | "mood">[], profitDayPct = 0.5) {
+export function summarize(days: (Pick<DayStat, "traded" | "pnl_pct" | "total_pct" | "trades" | "mood"> & { day_loss_pct?: number | null; dd_pct?: number | null })[], profitDayPct = 0.5) {
   const last = days[days.length - 1];
   const traded = days.filter(d => d.traded);
   const prev = days.slice(-11, -1).filter(d => d.traded);
@@ -144,7 +153,8 @@ export function summarize(days: Pick<DayStat, "traded" | "pnl_pct" | "total_pct"
     today: last ? Number(last.pnl_pct) : 0,
     todayTrades: last ? last.trades : 0,
     avgTrades: prev.length ? prev.reduce((a, d) => a + d.trades, 0) / prev.length : 0,
-    maxDD: -Math.min(0, ...days.map(d => Number(d.total_pct))),
+    maxDD: Math.max(-Math.min(0, ...days.map(d => Number(d.total_pct))), ...days.map(d => Number(d.dd_pct || 0))),
+    todayLoss: last ? Math.max(Number(last.day_loss_pct || 0), -Number(last.pnl_pct), 0) : 0,
     curDD: last ? Math.max(0, -Number(last.total_pct)) : 0,
     tradingDays: traded.length,
     profitDays: traded.filter(d => Number(d.pnl_pct) >= profitDayPct).length,
