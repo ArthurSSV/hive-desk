@@ -3,9 +3,9 @@ import { cookies } from "next/headers";
 import { userClient } from "@/lib/supabase";
 import { authorizeUrl } from "@/lib/ctrader";
 
-export async function GET() {
+export async function GET(req: Request) {
   const { data: { user } } = await userClient().auth.getUser();
-  const base = process.env.NEXT_PUBLIC_APP_URL!;
+  const base = new URL(req.url).origin;
   if (!user) return NextResponse.redirect(`${base}/login`);
   const state = crypto.randomUUID();
   cookies().set("ct_state", state, { httpOnly: true, secure: true, sameSite: "lax", maxAge: 600, path: "/" });

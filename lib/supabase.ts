@@ -2,9 +2,10 @@ import { createServerClient } from "@supabase/ssr";
 import { createClient } from "@supabase/supabase-js";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { supabaseUrl, anonKey, serviceKey } from "./env";
 
-const URL = () => process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const ANON = () => process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+const URL = supabaseUrl;
+const ANON = anonKey;
 
 /** Клиент от имени вошедшего пользователя (действуют правила RLS). */
 export function userClient() {
@@ -21,7 +22,7 @@ export function userClient() {
 
 /** Серверный клиент с service role: только для API-роутов и воркера. */
 export function serviceClient() {
-  return createClient(URL(), process.env.SUPABASE_SERVICE_ROLE_KEY!, { auth: { persistSession: false } });
+  return createClient(URL(), serviceKey(), { auth: { persistSession: false } });
 }
 
 export type Profile = { id: string; name: string; email: string; role: "trader" | "admin"; wallet: string | null; created_at: string };

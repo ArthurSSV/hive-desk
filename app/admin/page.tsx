@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { headers } from "next/headers";
 import { requireAdmin } from "@/lib/supabase";
 import { groupBundle } from "@/lib/data";
 import { TempChart, PhaseTag } from "@/components/ui";
@@ -10,6 +11,7 @@ const plural = (n: number) => { const a = n % 10, b = n % 100; return `${n} ${a 
 
 export default async function Admin() {
   const { sb } = await requireAdmin();
+  const site = `https://${headers().get("host")}`;
   const { traders: T, temp, rules: R } = await groupBundle(sb);
   const withAcc = T.filter(t => t.acc);
   const c = (f: (t: (typeof T)[number]) => boolean) => T.filter(f).length;
@@ -30,14 +32,14 @@ export default async function Admin() {
   }));
 
   if (!T.length) return (
-    <div className="head"><div><h1>Группа пуста</h1><p className="sub">Трейдеры появятся здесь автоматически, как только зарегистрируются по ссылке <span className="mono">{process.env.NEXT_PUBLIC_APP_URL}/register</span> и подключат cTrader.</p></div></div>
+    <div className="head"><div><h1>Группа пуста</h1><p className="sub">Трейдеры появятся здесь автоматически, как только зарегистрируются по ссылке <span className="mono">{site}/register</span> и подключат cTrader.</p></div></div>
   );
 
   return (
     <>
       <div className="head"><div>
         <div className="titlerow"><h1>Группа челленджа</h1><span className="count">{plural(T.length)}{fresh ? <small>+{fresh} сегодня</small> : null}</span></div>
-        <p className="sub">Classic 2-step · {lastSync ? `данные cTrader на ${new Date(lastSync).toLocaleString("ru-RU", { timeZone: "Europe/Kiev", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" })}` : "ждём первую синхронизацию"} · ссылка для регистрации: <span className="mono">{process.env.NEXT_PUBLIC_APP_URL}/register</span></p>
+        <p className="sub">Classic 2-step · {lastSync ? `данные cTrader на ${new Date(lastSync).toLocaleString("ru-RU", { timeZone: "Europe/Kiev", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" })}` : "ждём первую синхронизацию"} · ссылка для регистрации: <span className="mono">{site}/register</span></p>
       </div></div>
       <section className="strip" aria-label="Сводка">
         <div><div className="k">Фаза 1</div><div className="v">{p1}</div></div>

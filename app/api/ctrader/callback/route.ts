@@ -6,7 +6,7 @@ import { CTraderConnection, exchangeCode } from "@/lib/ctrader";
 export const maxDuration = 60;
 
 export async function GET(req: NextRequest) {
-  const base = process.env.NEXT_PUBLIC_APP_URL!;
+  const base = new URL(req.url).origin;
   const fail = (msg: string) => NextResponse.redirect(`${base}/connect?error=${encodeURIComponent(msg)}`);
   const { data: { user } } = await userClient().auth.getUser();
   if (!user) return NextResponse.redirect(`${base}/login`);
