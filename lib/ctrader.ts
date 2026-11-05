@@ -165,7 +165,8 @@ export function mapDeal(d: any, traderMoneyDigits: number) {
   const cp = d.closePositionDetail;
   const isClose = !!cp;
   const cmd = cp?.moneyDigits ?? md;
-  const net = isClose ? money(cp.grossProfit, cmd) + money(cp.swap, cmd) + money(cp.commission, cmd) : money(d.commission, md);
+  // Комиссия за всю позицию уже учтена в closePositionDetail — у открывающей сделки P&L = 0, иначе комиссия считается дважды
+  const net = isClose ? money(cp.grossProfit, cmd) + money(cp.swap, cmd) + money(cp.commission, cmd) : 0;
   return {
     deal_id: Number(d.dealId),
     position_id: d.positionId != null ? Number(d.positionId) : null,

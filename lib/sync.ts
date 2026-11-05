@@ -43,7 +43,7 @@ async function pullDeals(sb: SupabaseClient, acc: Account) {
 
     const { data: last } = await sb.from("deals").select("exec_ts").eq("account_id", acc.id).order("exec_ts", { ascending: false }).limit(1);
     // Старые сделки без лота/символа перезагружаем целиком (один раз после обновления)
-    const { count: missing } = await sb.from("deals").select("deal_id", { count: "exact", head: true }).eq("account_id", acc.id).or("lots.is.null,and(is_close.eq.true,conv.is.null)");
+    const { count: missing } = await sb.from("deals").select("deal_id", { count: "exact", head: true }).eq("account_id", acc.id).or("lots.is.null,and(is_close.eq.true,conv.is.null),and(is_close.eq.false,net_profit.neq.0)");
     const from = last?.[0] && !missing ? new Date(last[0].exec_ts).getTime() - 3600_000 : Date.now() - HISTORY_DAYS * 86400_000;
     const raw = await c.deals(acc.ctid_trader_account_id, from, Date.now());
     const mapped = raw
