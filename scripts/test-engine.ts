@@ -1,0 +1,45 @@
+// Проверка движка метрик на синтетических сделках: npm test
+import assert from "node:assert/strict";
+import { computeAccount, summarize } from "../lib/engine";
+import { DEFAULT_RULES } from "../lib/rules";
+
+const R = { ...DEFAULT_RULES, tz: "UTC" };
+const deal = (day: string, profit: number, close = true, lots = 1) => ({ exec_ts: `${day}T10:00:00Z`, is_close: close, net_profit: profit, volume: lots * 100 * 100000 });
+const pair = (day: string, profit: number, lots = 1) => [deal(day, 0, false, lots), deal(day, profit, true, lots)];
+
+// 1. Проходит фазу 1: +2% × 4 дня = +8%
+let r = computeAccount({ phase: 1, initialBalance: 50000, rules: R, startDay: "2026-11-02", today: "2026-11-06", journal: [],
+  deals: ["2026-11-02", "2026-11-03", "2026-11-04", "2026-11-05"].flatMap(d => pair(d, 1000)) });
+assert.equal(r.status, "passed"); assert.equal(r.statusDay, "2026-11-05"); assert.equal(r.days.at(-1)!.total_pct, 8);
+
+// 2. Нарушение дневного лимита: −5.2% за день
+r = computeAccount({ phase: 1, initialBalance: 10000, rules: R, startDay: "2026-11-02", today: "2026-11-04", journal: [], deals: [...pair("2026-11-02", 100), ...pair("2026-11-03", -520)] });
+assert.equal(r.status, "failed"); assert.equal(r.days.at(-1)!.breach, "daily"); assert.equal(r.days.at(-1)!.level, "red");
+
+// 3. Нарушение общего лимита серией убытков, с жёлтым флагом серии до этого
+r = computeAccount({ phase: 2, initialBalance: 10000, rules: R, startDay: "2026-11-02", today: "2026-11-06", journal: [],
+  deals: ["2026-11-02", "2026-11-03", "2026-11-04", "2026-11-05"].flatMap(d => pair(d, -260)) });
+assert.equal(r.days[2].flags.some(f => f.t.includes("убыточных")), true);
+assert.equal(r.status, "failed"); assert.equal(r.days.at(-1)!.breach, "max");
+
+// 4. Овертрейдинг и рост лота после убытка
+const many = Array.from({ length: 8 }, () => pair("2026-11-05", -10, 2)).flat();
+r = computeAccount({ phase: 1, initialBalance: 10000, rules: R, startDay: "2026-11-02", today: "2026-11-05", journal: [],
+  deals: [...pair("2026-11-02", 50), ...pair("2026-11-03", 20), ...pair("2026-11-04", -30), ...many] });
+const t = r.days.at(-1)!;
+assert.ok(t.flags.some(f => f.t.startsWith("Овертрейдинг")), "overtrading");
+assert.ok(t.flags.some(f => f.t.startsWith("Лот")), "lot increase");
+assert.equal(t.level, "red");
+
+// 5. Дневник: настроение и «не по плану» 2 дня подряд
+r = computeAccount({ phase: 1, initialBalance: 10000, rules: R, startDay: "2026-11-02", today: "2026-11-03", deals: [...pair("2026-11-02", 10), ...pair("2026-11-03", 10)],
+  journal: [{ day: "2026-11-02", mood: 3, plan: false }, { day: "2026-11-03", mood: 2, plan: false }] });
+assert.ok(r.days[1].flags.some(f => f.t.includes("не по плану")));
+assert.ok(r.days[1].flags.some(f => f.t.includes("Настроение")));
+
+// 6. Пропуск отчётов и сводка
+r = computeAccount({ phase: 1, initialBalance: 10000, rules: R, startDay: "2026-11-02", today: "2026-11-04", deals: pair("2026-11-02", 100), journal: [] });
+assert.ok(r.days[1].flags.some(f => f.t === "Нет отчёта 2 дня"));
+const s = summarize(r.days); assert.equal(s.tradingDays, 1); assert.equal(s.total, 1);
+
+console.log("engine: все 6 проверок пройдены");
