@@ -30,7 +30,7 @@ export async function traderBundle(sb: SupabaseClient, userId: string) {
   const acc = currentAccount((accounts || []) as Account[]);
   const { data: days } = acc ? await sb.from("daily_stats").select("*").eq("account_id", acc.id).order("day") : { data: [] as any[] };
   const jmap = new Map((journal || []).map((j: any) => [j.day, j]));
-  const merged = (days || []).map((d: any) => ({ ...d, mood: jmap.get(d.day)?.mood ?? null }));
+  const merged = (days || []).map((d: any) => ({ ...d, traded: d.trades > 0 || Number(d.pnl) !== 0, mood: jmap.get(d.day)?.mood ?? null }));
   return { profile, accounts: (accounts || []) as Account[], acc, days: merged, journal: journal || [], chain: chain || [], rules, m: summarize(merged) };
 }
 
@@ -39,7 +39,7 @@ export async function groupBundle(sb: SupabaseClient) {
   const [{ data: profiles }, { data: accounts }, { data: days }, { data: journal }, rules] = await Promise.all([
     sb.from("profiles").select("*").eq("role", "trader").order("created_at"),
     sb.from("ctrader_accounts").select("*"),
-    sb.from("daily_stats").select("account_id,user_id,day,pnl_pct,total_pct,trades,level,flags,breach").gte("day", since).order("day"),
+    sb.from("daily_stats").select("account_id,user_id,day,pnl,pnl_pct,total_pct,trades,level,flags,breach").gte("day", since).order("day"),
     sb.from("journal").select("user_id,day,mood").gte("day", since),
     rulesOf(sb),
   ]);
@@ -47,7 +47,7 @@ export async function groupBundle(sb: SupabaseClient) {
   for (const a of (accounts || []) as Account[]) { if (!accByUser.has(a.user_id)) accByUser.set(a.user_id, []); accByUser.get(a.user_id)!.push(a); }
   const moods = new Map((journal || []).map((j: any) => [j.user_id + j.day, j.mood]));
   const daysByAcc = new Map<number, any[]>();
-  for (const d of days || []) { const r = { ...d, mood: moods.get(d.user_id + d.day) ?? null }; if (!daysByAcc.has(d.account_id)) daysByAcc.set(d.account_id, []); daysByAcc.get(d.account_id)!.push(r); }
+  for (const d of days || []) { const r = { ...d, traded: d.trades > 0 || Number(d.pnl) !== 0, mood: moods.get(d.user_id + d.day) ?? null }; if (!daysByAcc.has(d.account_id)) daysByAcc.set(d.account_id, []); daysByAcc.get(d.account_id)!.push(r); }
   const todayIso = new Date().toISOString().slice(0, 10);
   const traders = (profiles || []).map((p: any) => {
     const acc = currentAccount(accByUser.get(p.id) || []);

@@ -39,7 +39,7 @@ export default function TraderView({ b, mode }: { b: B; mode: "self" | "admin" }
     <>
       <div className="head">
         <div><div className="titlerow"><h1>{profile?.name}</h1><Pill level={level} /><PhaseTag phase={acc.phase} status={acc.status} /></div>
-          <p className="sub">Счёт #{acc.trader_login || acc.ctid_trader_account_id} · {acc.broker_name || "cTrader"} · {usd(acc.initial_balance ?? acc.balance)}{self ? " · эти данные видите только вы и админ" : ` · ${profile?.email}`}</p></div>
+          <p className="sub">Счёт #{acc.trader_login || acc.ctid_trader_account_id} · {acc.broker_name || "cTrader"} · баланс {usd(acc.balance)} · старт фазы {usd(acc.initial_balance)}{self ? " · эти данные видите только вы и админ" : ` · ${profile?.email}`}</p></div>
         <form action={syncMe}><span className="fine">{acc.last_synced_at ? `Обновлено ${new Date(acc.last_synced_at).toLocaleString("ru-RU", { timeZone: "Europe/Kiev", hour: "2-digit", minute: "2-digit", day: "2-digit", month: "2-digit" })}` : "Ещё не синхронизирован"} </span>{self && <button className="btn ghost" type="submit">Обновить</button>}</form>
       </div>
       {acc.sync_error && <div className="w l-yellow notice">Последняя синхронизация не удалась: {acc.sync_error}</div>}
