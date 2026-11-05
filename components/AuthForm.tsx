@@ -6,9 +6,9 @@ import { supabaseUrl, anonKey } from "@/lib/env";
 
 const sb = () => createBrowserClient(supabaseUrl(), anonKey());
 
-export default function AuthForm({ mode }: { mode: "login" | "register" }) {
+export default function AuthForm({ mode, notice }: { mode: "login" | "register"; notice?: string }) {
   const reg = mode === "register";
-  const [err, setErr] = useState(""), [info, setInfo] = useState(""), [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(""), [info, setInfo] = useState(notice || ""), [busy, setBusy] = useState(false);
 
   async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault(); setErr(""); setInfo("");
