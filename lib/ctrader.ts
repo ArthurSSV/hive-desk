@@ -107,12 +107,29 @@ export class CTraderConnection {
     const out: any[] = [];
     for (let a = fromMs; a < toMs; a += WEEK) {
       const b = Math.min(a + WEEK, toMs);
-      const r = await this.request(PT.DEAL_LIST_REQ, { ctidTraderAccountId: ctid, fromTimestamp: a, toTimestamp: b, maxRows: 5000 }, PT.DEAL_LIST_RES);
+      const r = await this.limited(() => this.request(PT.DEAL_LIST_REQ, { ctidTraderAccountId: ctid, fromTimestamp: a, toTimestamp: b, maxRows: 5000 }, PT.DEAL_LIST_RES));
       out.push(...(r.deal || []));
     }
     return out;
   }
+
+  /** Исторические запросы cTrader ограничены ~5 в секунду: держим паузу и повторяем при лимите. */
+  private lastHist = 0;
+  private async limited<T>(fn: () => Promise<T>): Promise<T> {
+    for (let attempt = 0; ; attempt++) {
+      const wait = this.lastHist + 400 - Date.now();
+      if (wait > 0) await sleep(wait);
+      this.lastHist = Date.now();
+      try { return await fn(); }
+      catch (e: any) {
+        if (attempt < 4 && /BLOCKED_PAYLOAD_TYPE|rate limit/i.test(e.message)) { await sleep(1500 * (attempt + 1)); continue; }
+        throw e;
+      }
+    }
+  }
 }
+
+const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 
 const money = (v: any, md: number) => (Number(v || 0) / Math.pow(10, md));
 
