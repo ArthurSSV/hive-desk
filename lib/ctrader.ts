@@ -6,6 +6,8 @@ export const PT = {
   ERROR: 50,
   APP_AUTH_REQ: 2100, APP_AUTH_RES: 2101,
   ACCOUNT_AUTH_REQ: 2102, ACCOUNT_AUTH_RES: 2103,
+  SYMBOLS_LIST_REQ: 2114, SYMBOLS_LIST_RES: 2115,
+  SYMBOL_BY_ID_REQ: 2116, SYMBOL_BY_ID_RES: 2117,
   TRADER_REQ: 2121, TRADER_RES: 2122,
   DEAL_LIST_REQ: 2133, DEAL_LIST_RES: 2134,
   OA_ERROR: 2142,
@@ -101,6 +103,20 @@ export class CTraderConnection {
     const r = await this.request(PT.TRADER_REQ, { ctidTraderAccountId: ctid }, PT.TRADER_RES);
     return r.trader;
   }
+  /** Названия символов счёта: symbolId → имя. */
+  async symbolNames(ctid: number): Promise<Map<number, string>> {
+    const r = await this.request(PT.SYMBOLS_LIST_REQ, { ctidTraderAccountId: ctid }, PT.SYMBOLS_LIST_RES);
+    return new Map((r.symbol || []).map((s: any) => [Number(s.symbolId), String(s.symbolName)]));
+  }
+  /** Размер лота символов (в сотых долях единицы, как volume). */
+  async lotSizes(ctid: number, ids: number[]): Promise<Map<number, number>> {
+    const out = new Map<number, number>();
+    for (let i = 0; i < ids.length; i += 50) {
+      const r = await this.request(PT.SYMBOL_BY_ID_REQ, { ctidTraderAccountId: ctid, symbolId: ids.slice(i, i + 50) }, PT.SYMBOL_BY_ID_RES);
+      for (const s of r.symbol || []) if (s.lotSize) out.set(Number(s.symbolId), Number(s.lotSize));
+    }
+    return out;
+  }
   /** История сделок; cTrader отдаёт максимум неделю за запрос, поэтому идём окнами. */
   async deals(ctid: number, fromMs: number, toMs: number): Promise<any[]> {
     const WEEK = 7 * 24 * 3600 * 1000;
@@ -145,7 +161,9 @@ export function mapDeal(d: any, traderMoneyDigits: number) {
     position_id: d.positionId != null ? Number(d.positionId) : null,
     symbol_id: d.symbolId != null ? Number(d.symbolId) : null,
     side: d.tradeSide === 1 || d.tradeSide === "BUY" ? "buy" : "sell",
-    volume: d.volume != null ? Number(d.volume) : null,
+    volume: d.filledVolume != null ? Number(d.filledVolume) : d.volume != null ? Number(d.volume) : null,
+    price: d.executionPrice != null ? Number(d.executionPrice) : null,
+    entry_price: cp?.entryPrice != null ? Number(cp.entryPrice) : null,
     exec_ts: new Date(Number(d.executionTimestamp || d.createTimestamp)).toISOString(),
     is_close: isClose,
     net_profit: Math.round(net * 100) / 100,

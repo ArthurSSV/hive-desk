@@ -60,7 +60,7 @@ export async function saveRules(fd: FormData) {
   const { sb } = await requireAdmin();
   const cur = await loadRules(sb);
   const next: any = { ...cur };
-  for (const k of ["p1", "p2", "daily", "max", "minDays", "redDaily", "redDD"]) { const v = Number(fd.get(k)); if (v > 0) next[k] = v; }
+  for (const k of ["p1", "p2", "daily", "max", "minDays", "profitDayPct", "redDaily", "redDD"]) { const v = Number(fd.get(k)); if (v > 0) next[k] = v; }
   const tz = String(fd.get("tz") || "").trim(); if (tz) { try { new Intl.DateTimeFormat("en", { timeZone: tz }); next.tz = tz; } catch {} }
   await sb.from("settings").update({ rules: normalizeRules(next) }).eq("id", 1);
   revalidatePath("/admin/rules");

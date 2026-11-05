@@ -15,12 +15,12 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     <html lang="ru">
       <head>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700&family=Golos+Text:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap" />
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" />
       </head>
       <body>
         <header className="top"><div className="wrap">
           <Link href="/" className="brand" style={{ color: "inherit", textDecoration: "none" }}>
-            <svg width="26" height="26" viewBox="0 0 26 26" aria-hidden="true"><path d="M13 1.5 23 7.25v11.5L13 24.5 3 18.75V7.25z" fill="var(--accent)" /><path d="M13 7.5 18 10.4v5.2L13 18.5 8 15.6v-5.2z" fill="var(--surface)" /></svg>
+            <svg width="26" height="26" viewBox="0 0 26 26" aria-hidden="true"><path d="M13 1.5 23 7.25v11.5L13 24.5 3 18.75V7.25z" fill="none" stroke="var(--gold)" strokeWidth="1.8" /><path d="M13 7.5 18 10.4v5.2L13 18.5 8 15.6v-5.2z" fill="var(--gold)" /></svg>
             Hive Desk
           </Link>
           {user && (

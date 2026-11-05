@@ -27,7 +27,7 @@ export default async function Admin() {
 
   const rows: Row[] = T.map(t => ({
     id: t.p.id, name: t.p.name, email: t.p.email, fresh: t.fresh, level: t.level, phase: t.acc?.phase ?? null, status: t.acc?.status ?? null,
-    size: t.acc?.initial_balance ?? null, total: t.m.total, today: t.m.today, maxDD: t.m.maxDD, days: t.m.tradingDays, trades: t.m.todayTrades,
+    size: t.acc?.initial_balance ?? null, total: t.m.total, today: t.m.today, maxDD: t.m.maxDD, days: t.m.profitDays, trades: t.m.todayTrades,
     avgTrades: t.m.avgTrades, mood: t.m.mood, flags: t.flags.map(f => f.t).join(" · "), target: t.acc?.phase === 1 ? R.p1 : t.acc?.phase === 2 ? R.p2 : null,
   }));
 

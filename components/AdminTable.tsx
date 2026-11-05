@@ -26,7 +26,7 @@ export default function AdminTable({ rows, max, redDD, minDays }: { rows: Row[];
     .filter(r => (st === "all" || (st === "failed" ? r.status === "failed" : r.status !== "failed" && String(r.phase) === st))
       && (lv === "all" || r.level === lv) && (r.name + r.email).toLowerCase().includes(q.toLowerCase()))
     .sort((a, b) => { const A = key[sort.k](a), B = key[sort.k](b); return (A > B ? 1 : A < B ? -1 : 0) * sort.d; }), [rows, q, st, lv, sort]);
-  const cols: [string | null, string, boolean?][] = [["risk", "Светофор"], ["name", "Трейдер"], ["size", "Счёт", true], ["st", "Статус"], ["total", "P&L фазы", true], ["today", "Сегодня", true], ["dd", "Макс. DD", true], ["days", "Дни", true], ["trades", "Сделки / норма", true], ["mood", "Настр.", true], [null, "Причины"]];
+  const cols: [string | null, string, boolean?][] = [["risk", "Светофор"], ["name", "Трейдер"], ["size", "Счёт", true], ["st", "Статус"], ["total", "P&L фазы", true], ["today", "Сегодня", true], ["dd", "Макс. DD", true], ["days", "Прибыльн. дни", true], ["trades", "Сделки / норма", true], ["mood", "Настр.", true], [null, "Причины"]];
   const open = (id: string) => router.push(`/admin/trader/${id}`);
   return (
     <section className="panel">

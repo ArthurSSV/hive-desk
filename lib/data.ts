@@ -28,10 +28,15 @@ export async function traderBundle(sb: SupabaseClient, userId: string) {
     rulesOf(sb),
   ]);
   const acc = currentAccount((accounts || []) as Account[]);
-  const { data: days } = acc ? await sb.from("daily_stats").select("*").eq("account_id", acc.id).order("day") : { data: [] as any[] };
+  const [{ data: days }, { data: deals }] = acc
+    ? await Promise.all([
+        sb.from("daily_stats").select("*").eq("account_id", acc.id).order("day"),
+        sb.from("deals").select("deal_id,position_id,symbol,side,lots,price,entry_price,exec_ts,is_close,net_profit").eq("account_id", acc.id).order("exec_ts", { ascending: false }).limit(1000),
+      ])
+    : [{ data: [] as any[] }, { data: [] as any[] }];
   const jmap = new Map((journal || []).map((j: any) => [j.day, j]));
   const merged = (days || []).map((d: any) => ({ ...d, traded: d.trades > 0 || Number(d.pnl) !== 0, mood: jmap.get(d.day)?.mood ?? null }));
-  return { profile, accounts: (accounts || []) as Account[], acc, days: merged, journal: journal || [], chain: chain || [], rules, m: summarize(merged) };
+  return { profile, accounts: (accounts || []) as Account[], acc, days: merged, deals: (deals || []) as any[], journal: journal || [], chain: chain || [], rules, m: summarize(merged, rules.profitDayPct) };
 }
 
 export async function groupBundle(sb: SupabaseClient) {
@@ -54,7 +59,7 @@ export async function groupBundle(sb: SupabaseClient) {
     const ds = acc ? daysByAcc.get(acc.id) || [] : [];
     const last = ds[ds.length - 1];
     const level = !acc ? "none" : acc.status === "failed" ? "failed" : last?.level || "green";
-    return { p, acc, days: ds, m: summarize(ds), level, flags: (last?.flags || []) as { lv: string; t: string }[], fresh: p.created_at.slice(0, 10) === todayIso };
+    return { p, acc, days: ds, m: summarize(ds, rules.profitDayPct), level, flags: (last?.flags || []) as { lv: string; t: string }[], fresh: p.created_at.slice(0, 10) === todayIso };
   });
   // Температура группы: светофор по дням среди всех счетов
   const temp = new Map<string, { day: string; red: number; yellow: number; green: number }>();

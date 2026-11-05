@@ -41,12 +41,24 @@ async function pullDeals(sb: SupabaseClient, acc: Account) {
     const balance = Number(trader.balance) / Math.pow(10, md);
 
     const { data: last } = await sb.from("deals").select("exec_ts").eq("account_id", acc.id).order("exec_ts", { ascending: false }).limit(1);
-    const from = last?.[0] ? new Date(last[0].exec_ts).getTime() - 3600_000 : Date.now() - HISTORY_DAYS * 86400_000;
+    // Старые сделки без лота/символа перезагружаем целиком (один раз после обновления)
+    const { count: missing } = await sb.from("deals").select("deal_id", { count: "exact", head: true }).eq("account_id", acc.id).is("lots", null);
+    const from = last?.[0] && !missing ? new Date(last[0].exec_ts).getTime() - 3600_000 : Date.now() - HISTORY_DAYS * 86400_000;
     const raw = await c.deals(acc.ctid_trader_account_id, from, Date.now());
-    const rows = raw
+    const mapped = raw
       .map(d => mapDeal(d, md))
-      .filter(d => d.status === undefined || d.status === 2 || d.status === 3 || d.status === "FILLED" || d.status === "PARTIALLY_FILLED")
-      .map(({ status, ...d }) => ({ ...d, account_id: acc.id, user_id: acc.user_id }));
+      .filter(d => d.status === undefined || d.status === 2 || d.status === 3 || d.status === "FILLED" || d.status === "PARTIALLY_FILLED");
+    const ids = [...new Set(mapped.map(d => d.symbol_id).filter((x): x is number => x != null))];
+    const names = ids.length ? await c.symbolNames(acc.ctid_trader_account_id).catch(() => new Map<number, string>()) : new Map<number, string>();
+    const lotSz = ids.length ? await c.lotSizes(acc.ctid_trader_account_id, ids).catch(() => new Map<number, number>()) : new Map<number, number>();
+    const rows = mapped.map(({ status, ...d }) => {
+      const ls = d.symbol_id != null ? lotSz.get(d.symbol_id) : undefined;
+      return {
+        ...d, account_id: acc.id, user_id: acc.user_id,
+        symbol: d.symbol_id != null ? names.get(d.symbol_id) ?? null : null,
+        lots: d.volume != null && ls ? Math.round((d.volume / ls) * 100) / 100 : d.volume != null ? Math.round((d.volume / 100 / 100000) * 100) / 100 : null,
+      };
+    });
     for (let i = 0; i < rows.length; i += 500) {
       const { error } = await sb.from("deals").upsert(rows.slice(i, i + 500), { onConflict: "deal_id" });
       if (error) throw error;
@@ -65,7 +77,7 @@ async function pullDeals(sb: SupabaseClient, acc: Account) {
 
 /** Пересчитывает дневную статистику и статус счёта по уже сохранённым сделкам. */
 export async function recompute(sb: SupabaseClient, acc: Account, rules: Rules, initial: number) {
-  const { data: deals } = await sb.from("deals").select("exec_ts,is_close,net_profit,volume").eq("account_id", acc.id).order("exec_ts");
+  const { data: deals } = await sb.from("deals").select("exec_ts,is_close,net_profit,volume,lots").eq("account_id", acc.id).order("exec_ts");
   const { data: journal } = await sb.from("journal").select("day,mood,plan").eq("user_id", acc.user_id);
   const today = dayKey(new Date(), rules.tz);
   const res = computeAccount({

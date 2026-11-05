@@ -4,7 +4,7 @@ import { saveRules } from "@/app/actions";
 
 export const dynamic = "force-dynamic";
 
-const F: [string, string, string][] = [["p1", "Цель фазы 1, %", "0.5"], ["p2", "Цель фазы 2, %", "0.5"], ["daily", "Дневной лимит, %", "0.5"], ["max", "Общий лимит, %", "0.5"], ["minDays", "Мин. торговых дней", "1"], ["redDaily", "Красный: убыток за день от, %", "0.5"], ["redDD", "Красный: просадка от, %", "0.5"]];
+const F: [string, string, string][] = [["p1", "Цель фазы 1, %", "0.5"], ["p2", "Цель фазы 2, %", "0.5"], ["daily", "Дневной лимит, %", "0.5"], ["max", "Общий лимит, %", "0.5"], ["minDays", "Мин. прибыльных дней", "1"], ["profitDayPct", "Прибыльный день от, %", "0.1"], ["redDaily", "Красный: убыток за день от, %", "0.5"], ["redDD", "Красный: просадка от, %", "0.5"]];
 
 export default async function RulesPage({ searchParams }: { searchParams: { saved?: string } }) {
   const { sb } = await requireAdmin();

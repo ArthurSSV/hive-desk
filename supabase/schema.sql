@@ -92,6 +92,10 @@ create table if not exists public.deals (
   net_profit numeric not null default 0,
   balance_after numeric
 );
+alter table public.deals add column if not exists symbol text;
+alter table public.deals add column if not exists lots numeric;
+alter table public.deals add column if not exists price numeric;
+alter table public.deals add column if not exists entry_price numeric;
 create index if not exists deals_account_ts on public.deals(account_id, exec_ts);
 
 create table if not exists public.daily_stats (
@@ -137,7 +141,7 @@ create table if not exists public.settings (
   rules jsonb not null
 );
 insert into public.settings (id, rules) values (1,
-  '{"p1":8,"p2":5,"daily":5,"max":10,"minDays":4,"redDaily":3,"redDD":7,"tz":"UTC"}')
+  '{"p1":8,"p2":5,"daily":5,"max":10,"minDays":3,"profitDayPct":0.5,"redDaily":3,"redDD":7,"tz":"UTC"}')
 on conflict (id) do nothing;
 
 create table if not exists public.alerts_sent (

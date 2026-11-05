@@ -77,11 +77,19 @@ export function TempChart({ rows }: { rows: { day: string; red: number; yellow: 
   );
 }
 
-export function Gauge({ k, v, sub, pct, col, note }: { k: string; v: string; sub?: string; pct: number; col: string; note: string }) {
+const ICONS: Record<string, JSX.Element> = {
+  days: <path d="M4 7h16v13H4zM4 11h16M9 3v5M15 3v5M8 15h3" />,
+  daily: <path d="M4 5h16v14H4zM7 15l3-3 3 2 4-5" />,
+  max: <path d="M5 20V10M10 20V6M15 20v-7M20 20V4" />,
+  target: <><circle cx="12" cy="12" r="8" /><circle cx="12" cy="12" r="4" /><path d="M12 12l7-7" /></>,
+};
+
+export function Gauge({ k, v, sub, pct, col, note, icon }: { k: string; v: string; sub?: string; pct: number; col: string; note: string; icon: keyof typeof ICONS }) {
   return (
     <div className="panel gauge">
+      <div className="gicon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{ICONS[icon]}</svg></div>
       <div className="k">{k}</div>
-      <div className="v">{v}{sub && <> <small>{sub}</small></>}</div>
+      <div className="line"><span>{v}</span>{sub && <small>{sub}</small>}</div>
       <div className="bar"><i style={{ width: `${Math.max(0, Math.min(100, pct))}%`, background: col }} /></div>
       <div className="note">{note}</div>
     </div>

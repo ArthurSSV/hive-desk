@@ -4,6 +4,7 @@ import type { traderBundle } from "@/lib/data";
 import { saveJournal, syncMe } from "@/app/actions";
 import { EquityChart, Gauge, PhaseTag, Pill, cls, fmtD, sg, usd, type Day } from "./ui";
 import MetaMask from "./MetaMask";
+import DealsHistory from "./DealsHistory";
 
 type B = Awaited<ReturnType<typeof traderBundle>>;
 
@@ -46,12 +47,12 @@ export default function TraderView({ b, mode }: { b: B; mode: "self" | "admin" }
       {warns.length > 0 && <div className="warn">{warns.map((w, i) => <div key={i} className={`w l-${w.lv}`}>{w.t}</div>)}</div>}
 
       <div className="gauges">
+        <Gauge icon="days" k="Прибыльные дни" v={`${m.profitDays} дн.`} sub={`Цель: ${R.minDays} дн.`} pct={(m.profitDays / R.minDays) * 100} col="var(--gold)" note={`День считается прибыльным от +${R.profitDayPct}% · торговых дней ${m.tradingDays}`} />
+        <Gauge icon="daily" k="Дневной убыток" v={failed ? "—" : `${Math.max(0, -m.today).toFixed(2)}%`} sub={`Допуск: ${R.daily}%`} pct={(Math.max(0, -m.today) / R.daily) * 100} col={-m.today >= R.redDaily ? "var(--red)" : "var(--gold)"} note={failed ? "Счёт закрыт" : `Запас ${leftDaily.toFixed(2)}% · ${usd((init * leftDaily) / 100)}`} />
+        <Gauge icon="max" k="Общая просадка" v={`${m.maxDD.toFixed(2)}%`} sub={`Допуск: ${R.max}%`} pct={(m.maxDD / R.max) * 100} col={m.maxDD >= R.redDD ? "var(--red)" : "var(--red)"} note={`Сейчас ${m.curDD.toFixed(2)}% от старта фазы`} />
         {target != null
-          ? <Gauge k={`Цель фазы ${acc.phase}`} v={`${sg(m.total)}%`} sub={`из +${target}%`} pct={(m.total / target) * 100} col="var(--hive)" note={m.total >= target ? "Цель достигнута" : `Осталось ${(target - m.total).toFixed(2)}% · ${usd((init * (target - m.total)) / 100)}`} />
-          : <Gauge k="Funded-счёт" v={`${sg(m.total)}%`} pct={100} col="var(--green)" note="Прибыль с начала funded" />}
-        <Gauge k="Дневной лимит" v={failed ? "—" : `${sg(m.today)}%`} sub={`лимит −${R.daily}%`} pct={(Math.max(0, -m.today) / R.daily) * 100} col={-m.today >= R.redDaily ? "var(--red)" : "var(--amber)"} note={failed ? "—" : `Запас ${leftDaily.toFixed(1)}% · ${usd((init * leftDaily) / 100)}`} />
-        <Gauge k="Общая просадка" v={`${m.curDD.toFixed(1)}%`} sub={`лимит −${R.max}%`} pct={(m.curDD / R.max) * 100} col={m.curDD >= R.redDD ? "var(--red)" : "var(--amber)"} note={`Макс. за фазу ${m.maxDD.toFixed(1)}%`} />
-        <Gauge k="Торговые дни" v={String(m.tradingDays)} sub={target != null ? `мин. ${R.minDays}` : ""} pct={target != null ? (m.tradingDays / R.minDays) * 100 : 100} col="var(--hive)" note={m.tradingDays >= R.minDays ? "Минимум выполнен" : `Нужно ещё ${R.minDays - m.tradingDays}`} />
+          ? <Gauge icon="target" k="Цель прибыли" v={`${sg(m.total)}%`} sub={`Цель: ${target}%`} pct={(m.total / target) * 100} col="var(--green)" note={m.total >= target ? "Цель достигнута" : `Осталось ${(target - m.total).toFixed(2)}% · ${usd((init * (target - m.total)) / 100)}`} />
+          : <Gauge icon="target" k="Funded-счёт" v={`${sg(m.total)}%`} pct={100} col="var(--green)" note="Прибыль с начала funded" />}
       </div>
 
       <div className="grid2">
@@ -89,6 +90,8 @@ export default function TraderView({ b, mode }: { b: B; mode: "self" | "admin" }
         </div>
       </div>
 
+      <DealsHistory deals={b.deals} login={acc.trader_login || acc.ctid_trader_account_id} initial={init} />
+
       <section className="panel"><div className="ph"><h2>История по дням</h2></div>
         <div className="tablewrap"><table className="daytbl"><thead><tr><th>Дата</th><th className="n">P&amp;L дня</th><th className="n">Итог фазы</th><th className="n">Сделки</th><th className="n">Макс. лот</th><th className="n">Настр.</th><th>План</th><th>Светофор</th></tr></thead>
           <tbody>{[...days].reverse().slice(0, 20).map((d: any) => { const j: any = notesById.get(d.day); return (
@@ -97,7 +100,7 @@ export default function TraderView({ b, mode }: { b: B; mode: "self" | "admin" }
               <td className={`n ${cls(d.pnl_pct)}`}>{d.trades || Number(d.pnl) ? `${sg(Number(d.pnl_pct))}%` : "—"}</td>
               <td className={`n ${cls(d.total_pct)}`}>{sg(Number(d.total_pct))}%</td>
               <td className="n">{d.trades || "—"}</td>
-              <td className="n">{Number(d.max_lot) || "—"}</td>
+              <td className="n">{Number(d.max_lot) ? Number(d.max_lot).toFixed(2) : "—"}</td>
               <td className="n">{j?.mood ?? "—"}</td>
               <td>{!j ? <span className="fine">нет отчёта</span> : j.plan == null ? "—" : j.plan ? "да" : <span className="neg">нет</span>}</td>
               <td>{d.breach ? <Pill level="failed" /> : <Pill level={d.level} />}</td>

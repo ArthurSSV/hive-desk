@@ -3,11 +3,11 @@ import assert from "node:assert/strict";
 import { computeAccount, summarize } from "../lib/engine";
 import { DEFAULT_RULES } from "../lib/rules";
 
-const R = { ...DEFAULT_RULES, tz: "UTC" };
+const R = { ...DEFAULT_RULES, tz: "UTC", minDays: 4 };
 const deal = (day: string, profit: number, close = true, lots = 1) => ({ exec_ts: `${day}T10:00:00Z`, is_close: close, net_profit: profit, volume: lots * 100 * 100000 });
 const pair = (day: string, profit: number, lots = 1) => [deal(day, 0, false, lots), deal(day, profit, true, lots)];
 
-// 1. Проходит фазу 1: +2% × 4 дня = +8%
+// 1. Проходит фазу 1: +2% × 4 дня = +8% (прибыльных дней ≥ 3)
 let r = computeAccount({ phase: 1, initialBalance: 50000, rules: R, startDay: "2026-11-02", today: "2026-11-06", journal: [],
   deals: ["2026-11-02", "2026-11-03", "2026-11-04", "2026-11-05"].flatMap(d => pair(d, 1000)) });
 assert.equal(r.status, "passed"); assert.equal(r.statusDay, "2026-11-05"); assert.equal(r.days.at(-1)!.total_pct, 8);
@@ -41,5 +41,8 @@ assert.ok(r.days[1].flags.some(f => f.t.includes("Настроение")));
 r = computeAccount({ phase: 1, initialBalance: 10000, rules: R, startDay: "2026-11-02", today: "2026-11-04", deals: pair("2026-11-02", 100), journal: [] });
 assert.ok(r.days[1].flags.some(f => f.t === "Нет отчёта 2 дня"));
 const s = summarize(r.days); assert.equal(s.tradingDays, 1); assert.equal(s.total, 1);
+// до подключения отчёт не требуется
+r = computeAccount({ phase: 1, initialBalance: 10000, rules: R, startDay: "2026-11-05", today: "2026-11-05", deals: [...pair("2026-11-02", 10), ...pair("2026-11-03", 10)], journal: [] });
+assert.ok(!r.days.some(d => d.flags.some(f => f.t === "Нет отчёта 2 дня")));
 
-console.log("engine: все 6 проверок пройдены");
+console.log("engine: все проверки пройдены");
