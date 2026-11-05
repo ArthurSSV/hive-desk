@@ -154,7 +154,8 @@ export async function syncAll(sb: SupabaseClient, opts: { userId?: string; log?:
       if (acc.status === "active" || initial == null) ({ initial } = await pullDeals(sb, acc));
       const out = await recompute(sb, acc, rules, Number(initial));
       await notify(sb, acc, out);
-      ok++; log(`ok  ${acc.ctid_trader_account_id} ${out.res.status} ${out.res.days.length}d`);
+      const L = out.res.days[out.res.days.length - 1];
+      ok++; log(`ok  ${acc.ctid_trader_account_id} ${out.res.status} ${out.res.days.length}d total=${L?.total_pct ?? 0}% dd=${L?.dd_pct ?? 0}% start=${initial}`);
     } catch (e: any) {
       failed++; log(`err ${acc.ctid_trader_account_id}: ${e.message}`);
       await sb.from("ctrader_accounts").update({ sync_error: String(e.message).slice(0, 300), last_synced_at: new Date().toISOString() }).eq("id", acc.id);
