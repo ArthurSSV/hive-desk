@@ -97,7 +97,7 @@ export function Gauge({ k, v, sub, pct, col, note, icon }: { k: string; v: strin
 }
 
 /** Общая кривая группы: накопленный результат, % от общего капитала (сверху) и итог дня, $ (снизу). */
-export function GroupChart({ rows, sel }: { rows: { day: string; pnl: number; cumPct: number }[]; sel: string | null }) {
+export function GroupChart({ rows, from, to }: { rows: { day: string; pnl: number; cumPct: number }[]; from?: string | null; to?: string | null }) {
   if (!rows.length) return <p className="fine">Данные появятся после первой синхронизации.</p>;
   const W = 680, H = 300, pl = 54, pr = 14, top = 12, mid = 178, gap = 18, bot = H - 22;
   const n = rows.length, step = (W - pl - pr) / n;
@@ -114,12 +114,14 @@ export function GroupChart({ rows, sel }: { rows: { day: string; pnl: number; cu
   const line = rows.map((r, i) => `${i ? "L" : "M"}${cx(i).toFixed(1)} ${y(r.cumPct).toFixed(1)}`).join("");
   const area = `${line}L${cx(n - 1)} ${y(0)}L${cx(0)} ${y(0)}Z`;
   const every = Math.ceil(n / 7);
-  const si = sel ? rows.findIndex(r => r.day === sel) : -1;
+  const si = from ? rows.findIndex(r => r.day >= from) : -1;
+  const ei = to ? rows.map(r => r.day <= to).lastIndexOf(true) : -1;
+  const inSel = (i: number) => si >= 0 && i >= si && i <= ei;
   const last = rows[n - 1];
   const usdS = (v: number) => (v < 0 ? "−$" : "+$") + Math.abs(Math.round(v)).toLocaleString("en-US");
   return (
     <svg className="chart" viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Общий результат группы по дням">
-      {si >= 0 && <rect x={pl + si * step} y={top} width={step} height={bot - top} fill="var(--gold)" opacity={0.08} />}
+      {si >= 0 && ei >= si && <rect x={pl + si * step} y={top} width={(ei - si + 1) * step} height={bot - top} fill="var(--gold)" opacity={0.08} />}
       {ticks.map(t => <g key={t}><line x1={pl} x2={W - pr} y1={y(t)} y2={y(t)} stroke="var(--line)" strokeWidth={t === 0 ? 1.2 : 0.6} /><text x={pl - 6} y={y(t) + 3} textAnchor="end">{t > 0 ? "+" : ""}{t.toFixed(tick < 0.1 ? 2 : tick < 1 ? 1 : 0)}%</text></g>)}
       <path d={area} fill="var(--gold)" opacity={0.1} />
       <path d={line} fill="none" stroke="var(--gold)" strokeWidth={2} strokeLinejoin="round" />
@@ -130,7 +132,7 @@ export function GroupChart({ rows, sel }: { rows: { day: string; pnl: number; cu
       <text x={pl - 6} y={b0 + bh} textAnchor="end">{usdS(-bmax)}</text>
       {rows.map((r, i) => {
         const h = Math.abs(by(r.pnl) - b0);
-        return <rect key={r.day} x={cx(i) - step * 0.32} y={r.pnl >= 0 ? b0 - h : b0} width={step * 0.64} height={Math.max(h, r.pnl ? 1 : 0)} fill={r.pnl >= 0 ? "var(--green)" : "var(--red)"} opacity={i === si ? 1 : 0.75}><title>{`${fmtD(r.day)}: ${usdS(r.pnl)}`}</title></rect>;
+        return <rect key={r.day} x={cx(i) - step * 0.32} y={r.pnl >= 0 ? b0 - h : b0} width={step * 0.64} height={Math.max(h, r.pnl ? 1 : 0)} fill={r.pnl >= 0 ? "var(--green)" : "var(--red)"} opacity={si < 0 || inSel(i) ? 0.95 : 0.4}><title>{`${fmtD(r.day)}: ${usdS(r.pnl)}`}</title></rect>;
       })}
       {rows.map((r, i) => ((i % every === 0 && n - 1 - i >= every / 2) || i === n - 1) ? <text key={"x" + r.day} x={cx(i)} y={H - 6} textAnchor="middle">{fmtD(r.day)}</text> : null)}
     </svg>
