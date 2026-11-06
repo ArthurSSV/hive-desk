@@ -4,6 +4,7 @@ import { requireAdmin } from "@/lib/supabase";
 import { groupBundle } from "@/lib/data";
 import { TempChart, PhaseTag } from "@/components/ui";
 import AdminTable, { type Row } from "@/components/AdminTable";
+import { LEVEL_LABEL } from "@/lib/rules";
 
 export const dynamic = "force-dynamic";
 
@@ -18,10 +19,12 @@ export default async function Admin() {
   const p1 = c(t => t.acc?.phase === 1 && t.acc.status !== "failed"), p2 = c(t => t.acc?.phase === 2 && t.acc.status !== "failed");
   const funded = c(t => t.acc?.phase === 3 && t.acc.status !== "failed"), failed = c(t => t.acc?.status === "failed"), noAcc = c(t => !t.acc);
   const live = withAcc.filter(t => t.acc!.status !== "failed");
-  const red = live.filter(t => t.level === "red").length, yel = live.filter(t => t.level === "yellow").length;
+  const red = live.filter(t => t.level === "red").length, yel = live.filter(t => t.level === "yellow").length, near = live.filter(t => t.level === "green").length;
   const avgDD = live.length ? live.reduce((a, t) => a + t.m.curDD, 0) / live.length : 0;
   const fresh = T.filter(t => t.fresh).length;
-  const alerts = live.filter(t => t.level === "red" || t.level === "yellow").sort((a, b) => (b.level === "red" ? 1 : 0) - (a.level === "red" ? 1 : 0) || b.m.maxDD - a.m.maxDD);
+  const W: Record<string, number> = { red: 3, yellow: 2 };
+  const urgent = (t: (typeof T)[number]) => t.flags.some(f => f.lv === "red");
+  const alerts = live.filter(t => t.level === "red" || t.level === "yellow" || urgent(t)).sort((a, b) => (W[b.level] || 0) - (W[a.level] || 0) || Number(urgent(b)) - Number(urgent(a)) || a.m.total - b.m.total);
   const lastSync = withAcc.map(t => t.acc!.last_synced_at).filter(Boolean).sort().pop();
   const dist: [number, string, string][] = [[p1, "var(--muted)", "Фаза 1"], [p2, "var(--hive)", "Фаза 2"], [funded, "var(--green)", "Funded"], [failed, "var(--red)", "Failed"], [noAcc, "var(--line)", "Без счёта"]];
 
@@ -46,7 +49,7 @@ export default async function Admin() {
         <div><div className="k">Фаза 2</div><div className="v">{p2}</div></div>
         <div><div className="k">Funded</div><div className="v">{funded}</div></div>
         <div><div className="k">Failed</div><div className="v">{failed} <small>{withAcc.length ? Math.round((failed / withAcc.length) * 100) : 0}%</small></div></div>
-        <div><div className="k">Тильт сегодня</div><div className="v red">{red} <small>+{yel} жёлт.</small></div></div>
+        <div><div className="k">Буксир</div><div className="v red">{red} <small>+{yel} предупр. · {near} у цели</small></div></div>
         <div><div className="k">Средняя просадка</div><div className="v">{avgDD.toFixed(1)}<small>%</small></div></div>
       </section>
       <div className="grid2">
@@ -57,8 +60,8 @@ export default async function Admin() {
         </section>
         <section className="panel"><div className="ph"><h2>Требуют внимания</h2><span className="fine">{alerts.length}</span></div>
           <div className="alerts">{alerts.map(t => (
-            <Link key={t.p.id} href={`/admin/trader/${t.p.id}`} className={`alert ${t.level}`} style={{ textDecoration: "none" }}>
-              <div><b>{t.p.name}</b> <PhaseTag phase={t.acc!.phase} status={t.acc!.status} /><div className="why">{t.flags.map(f => f.t).join(" · ")}</div></div>
+            <Link key={t.p.id} href={`/admin/trader/${t.p.id}`} className={`alert ${t.level === "red" || (t.level !== "yellow" && urgent(t)) ? "red" : "yellow"}`} style={{ textDecoration: "none" }}>
+              <div><b>{t.p.name}</b> <PhaseTag phase={t.acc!.phase} status={t.acc!.status} /><div className="why">{LEVEL_LABEL[t.level]} · результат {t.m.total > 0 ? "+" : ""}{t.m.total.toFixed(2)}%{t.flags.length ? " · " + t.flags.map(f => f.t).join(" · ") : ""}</div></div>
             </Link>))}
             {!alerts.length && <p className="fine">Сегодня всё спокойно.</p>}</div>
         </section>

@@ -131,8 +131,13 @@ async function notify(sb: SupabaseClient, acc: Account, out: Awaited<ReturnType<
   const events: { level: string; text: string }[] = [];
   if (out.res.status !== out.wasStatus && out.res.status !== "active")
     events.push({ level: out.res.status, text: out.res.status === "failed" ? `⛔ ${who}: счёт закрыт (${last.flags[0]?.t || "лимит"})` : `✅ ${who}: цель фазы выполнена` });
-  if (last.day === out.today && (last.level === "red" || last.level === "yellow"))
-    events.push({ level: last.level, text: `${last.level === "red" ? "🔴" : "🟡"} ${who}\n${last.flags.map(f => "• " + f.t).join("\n")}` });
+  const prev = out.res.days[out.res.days.length - 2];
+  const ICON: Record<string, string> = { red: "🔴 Буксир", yellow: "🟡 Предупреждение", green: "🟢 Цель близко" };
+  if (last.day === out.today && ICON[last.level] && last.level !== prev?.level)
+    events.push({ level: "zone-" + last.level, text: `${ICON[last.level]} · ${who}\nРезультат фазы ${last.total_pct > 0 ? "+" : ""}${last.total_pct}%${last.flags.length ? "\n" + last.flags.map(f => "• " + f.t).join("\n") : ""}` });
+  const redFlags = last.flags.filter(f => f.lv === "red");
+  if (last.day === out.today && redFlags.length)
+    events.push({ level: "flags", text: `⚠️ ${who}\n${redFlags.map(f => "• " + f.t).join("\n")}` });
   for (const e of events) {
     const { error } = await sb.from("alerts_sent").insert({ account_id: acc.id, day: last.day, level: e.level });
     if (!error) await sendTelegram(e.text); // уже отправленное за этот день — пропускаем

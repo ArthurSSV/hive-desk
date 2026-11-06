@@ -9,7 +9,7 @@ export type Row = {
   mood: number | null; flags: string; target: number | null;
 };
 
-const LV = ["red", "yellow", "green", "failed", "none"];
+const LV = ["red", "yellow", "work", "green", "failed", "none"];
 const sg = (v: number) => (v > 0 ? "+" : "") + v.toFixed(2);
 const cls = (v: number) => (v > 0 ? "pos" : v < 0 ? "neg" : "");
 
@@ -17,7 +17,7 @@ export default function AdminTable({ rows, max, redDD, minDays }: { rows: Row[];
   const router = useRouter();
   const [q, setQ] = useState(""), [st, setSt] = useState("all"), [lv, setLv] = useState("all");
   const [sort, setSort] = useState<{ k: string; d: number }>({ k: "risk", d: -1 });
-  const risk = (r: Row) => (r.level === "failed" || r.level === "none" ? -1 : (r.level === "red" ? 200 : r.level === "yellow" ? 100 : 0) + r.maxDD * 3);
+  const risk = (r: Row) => (r.level === "failed" || r.level === "none" ? -1 : (r.level === "red" ? 300 : r.level === "yellow" ? 200 : r.level === "work" ? 100 : 0) + (r.flags ? 50 : 0) + r.maxDD * 3);
   const key: Record<string, (r: Row) => any> = {
     risk, name: r => r.name, size: r => r.size ?? 0, st: r => (r.status === "failed" ? 9 : r.phase ?? 0), total: r => r.total,
     today: r => r.today, dd: r => r.maxDD, days: r => r.days, trades: r => (r.avgTrades ? r.trades / r.avgTrades : 0), mood: r => r.mood ?? 0,

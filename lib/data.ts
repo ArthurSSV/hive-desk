@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { summarize } from "./engine";
-import { normalizeRules } from "./rules";
+import { normalizeRules, zoneOf } from "./rules";
 
 export type Account = {
   id: number; user_id: string; ctid_trader_account_id: number; trader_login: number | null; broker_name: string | null;
@@ -35,7 +35,7 @@ export async function traderBundle(sb: SupabaseClient, userId: string) {
       ])
     : [{ data: [] as any[] }, { data: [] as any[] }];
   const jmap = new Map((journal || []).map((j: any) => [j.day, j]));
-  const merged = (days || []).map((d: any) => ({ ...d, traded: d.trades > 0 || Number(d.pnl) !== 0, mood: jmap.get(d.day)?.mood ?? null }));
+  const merged = (days || []).map((d: any) => ({ ...d, level: zoneOf(d.total_pct, acc!.phase, rules), traded: d.trades > 0 || Number(d.pnl) !== 0, mood: jmap.get(d.day)?.mood ?? null }));
   return { profile, accounts: (accounts || []) as Account[], acc, days: merged, deals: (deals || []) as any[], journal: journal || [], chain: chain || [], rules, m: summarize(merged, rules.profitDayPct) };
 }
 
@@ -51,21 +51,22 @@ export async function groupBundle(sb: SupabaseClient) {
   const accByUser = new Map<string, Account[]>();
   for (const a of (accounts || []) as Account[]) { if (!accByUser.has(a.user_id)) accByUser.set(a.user_id, []); accByUser.get(a.user_id)!.push(a); }
   const moods = new Map((journal || []).map((j: any) => [j.user_id + j.day, j.mood]));
+  const phaseOf = new Map(((accounts || []) as Account[]).map(a => [a.id, a.phase]));
   const daysByAcc = new Map<number, any[]>();
-  for (const d of days || []) { const r = { ...d, traded: d.trades > 0 || Number(d.pnl) !== 0, mood: moods.get(d.user_id + d.day) ?? null }; if (!daysByAcc.has(d.account_id)) daysByAcc.set(d.account_id, []); daysByAcc.get(d.account_id)!.push(r); }
+  for (const d of days || []) { const r = { ...d, level: zoneOf(d.total_pct, phaseOf.get(d.account_id) ?? 1, rules), traded: d.trades > 0 || Number(d.pnl) !== 0, mood: moods.get(d.user_id + d.day) ?? null }; if (!daysByAcc.has(d.account_id)) daysByAcc.set(d.account_id, []); daysByAcc.get(d.account_id)!.push(r); }
   const todayIso = new Date().toISOString().slice(0, 10);
   const traders = (profiles || []).map((p: any) => {
     const acc = currentAccount(accByUser.get(p.id) || []);
     const ds = acc ? daysByAcc.get(acc.id) || [] : [];
     const last = ds[ds.length - 1];
-    const level = !acc ? "none" : acc.status === "failed" ? "failed" : last?.level || "green";
+    const level = !acc ? "none" : acc.status === "failed" ? "failed" : last?.level || "work";
     return { p, acc, days: ds, m: summarize(ds, rules.profitDayPct), level, flags: (last?.flags || []) as { lv: string; t: string }[], fresh: p.created_at.slice(0, 10) === todayIso };
   });
   // Температура группы: светофор по дням среди всех счетов
-  const temp = new Map<string, { day: string; red: number; yellow: number; green: number }>();
+  const temp = new Map<string, { day: string; red: number; yellow: number; work: number; green: number }>();
   for (const t of traders) for (const d of t.days) {
-    if (!temp.has(d.day)) temp.set(d.day, { day: d.day, red: 0, yellow: 0, green: 0 });
-    const r = temp.get(d.day)!; if (d.level === "red" || d.level === "yellow" || d.level === "green") r[d.level as "red"]++;
+    if (!temp.has(d.day)) temp.set(d.day, { day: d.day, red: 0, yellow: 0, work: 0, green: 0 });
+    const r = temp.get(d.day)! as any; if (d.level in r) r[d.level]++;
   }
   return { traders, temp: [...temp.values()].sort((a, b) => a.day.localeCompare(b.day)).slice(-22), rules };
 }

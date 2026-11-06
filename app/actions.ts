@@ -53,6 +53,11 @@ export async function saveRules(fd: FormData) {
   const cur = await loadRules(sb);
   const next: any = { ...cur };
   for (const k of ["p1", "p2", "daily", "max", "minDays", "profitDayPct", "redDaily", "redDD"]) { const v = Number(fd.get(k)); if (v > 0) next[k] = v; }
+  for (const k of ["zoneGreen1", "zoneGreen2", "zoneGreenF"]) { const v = fd.get(k); if (v !== null && v !== "" && Number.isFinite(Number(v))) next[k] = Number(v); }
+  // Пороги убытка храним отрицательными, даже если ввели «2» вместо «−2»
+  for (const k of ["zoneYellow", "zoneRed"]) { const v = fd.get(k); if (v !== null && v !== "" && Number.isFinite(Number(v))) next[k] = -Math.abs(Number(v)); }
+  if (next.zoneRed > next.zoneYellow) [next.zoneRed, next.zoneYellow] = [next.zoneYellow, next.zoneRed];
+  revalidatePath("/admin"); revalidatePath("/dashboard");
   const tz = String(fd.get("tz") || "").trim(); if (tz) { try { new Intl.DateTimeFormat("en", { timeZone: tz }); next.tz = tz; } catch {} }
   await sb.from("settings").update({ rules: normalizeRules(next) }).eq("id", 1);
   revalidatePath("/admin/rules");

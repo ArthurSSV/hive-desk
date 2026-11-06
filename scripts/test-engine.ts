@@ -1,7 +1,7 @@
 // Проверка движка метрик на синтетических сделках: npm test
 import assert from "node:assert/strict";
 import { computeAccount, summarize } from "../lib/engine";
-import { DEFAULT_RULES } from "../lib/rules";
+import { DEFAULT_RULES, zoneOf } from "../lib/rules";
 import { buildPositions, minEquityByDay } from "../lib/equity";
 
 const R = { ...DEFAULT_RULES, tz: "UTC", minDays: 4 };
@@ -15,7 +15,8 @@ assert.equal(r.status, "passed"); assert.equal(r.statusDay, "2026-11-05"); asser
 
 // 2. Нарушение дневного лимита: −5.2% за день
 r = computeAccount({ phase: 1, initialBalance: 10000, rules: R, startDay: "2026-11-02", today: "2026-11-04", journal: [], deals: [...pair("2026-11-02", 100), ...pair("2026-11-03", -520)] });
-assert.equal(r.status, "failed"); assert.equal(r.days.at(-1)!.breach, "daily"); assert.equal(r.days.at(-1)!.level, "red");
+assert.equal(r.status, "failed"); assert.equal(r.days.at(-1)!.breach, "daily"); assert.ok(r.days.at(-1)!.flags.some(f => f.lv === "red"));
+assert.equal(r.days.at(-1)!.level, "yellow"); // −4.2% результата фазы → зона «Предупреждение»
 
 // 3. Нарушение общего лимита серией убытков, с жёлтым флагом серии до этого
 r = computeAccount({ phase: 2, initialBalance: 10000, rules: R, startDay: "2026-11-02", today: "2026-11-06", journal: [],
@@ -30,7 +31,7 @@ r = computeAccount({ phase: 1, initialBalance: 10000, rules: R, startDay: "2026-
 const t = r.days.at(-1)!;
 assert.ok(t.flags.some(f => f.t.startsWith("Овертрейдинг")), "overtrading");
 assert.ok(t.flags.some(f => f.t.startsWith("Лот")), "lot increase");
-assert.equal(t.level, "red");
+assert.ok(t.flags.some(f => f.lv === "red"));
 
 // 5. Дневник: настроение и «не по плану» 2 дня подряд
 r = computeAccount({ phase: 1, initialBalance: 10000, rules: R, startDay: "2026-11-02", today: "2026-11-03", deals: [...pair("2026-11-02", 10), ...pair("2026-11-03", 10)],
@@ -58,5 +59,10 @@ assert.equal(me.get("2026-11-04"), 49600);
 r = computeAccount({ phase: 1, initialBalance: 50000, rules: R, startDay: "2026-11-04", today: "2026-11-04", journal: [], minEquity: me,
   deals: xd.map(d => ({ exec_ts: d.exec_ts, is_close: d.is_close, net_profit: d.net_profit, volume: d.volume })) });
 assert.equal(r.days[0].dd_pct, 0.8); assert.equal(r.days[0].day_loss_pct, 0.8); assert.equal(r.days[0].total_pct, 0.4);
+
+// 8. Зоны светофора по результату фазы
+assert.equal(zoneOf(6, 1, R), "green"); assert.equal(zoneOf(5.9, 1, R), "work");
+assert.equal(zoneOf(4, 2, R), "green"); assert.equal(zoneOf(-2, 1, R), "yellow");
+assert.equal(zoneOf(-4.99, 2, R), "yellow"); assert.equal(zoneOf(-5, 1, R), "red");
 
 console.log("engine: все проверки пройдены");

@@ -21,7 +21,7 @@ export default function TraderView({ b, mode }: { b: B; mode: "self" | "admin" }
   const target = acc.phase === 1 ? R.p1 : acc.phase === 2 ? R.p2 : null;
   const failed = acc.status === "failed";
   const last: any = days[days.length - 1];
-  const level = failed ? "failed" : last?.level || "green";
+  const level = failed ? "failed" : last?.level || "work";
   const leftDaily = R.daily - m.todayLoss, leftMax = R.max - m.maxDD;
   const warns: { lv: string; t: string }[] = [];
   if (failed) warns.push({ lv: "failed", t: "Счёт закрыт по нарушению лимита." });

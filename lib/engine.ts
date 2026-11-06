@@ -1,11 +1,11 @@
 // Движок метрик: сделки cTrader + дневник → дневная статистика, статус фазы и флаги светофора.
 // Чистые функции, без обращения к базе — используется воркером и тестом.
-import type { Rules } from "./rules";
+import { zoneOf, type Rules, type Zone } from "./rules";
 
 export type DealRow = { exec_ts: string; is_close: boolean; net_profit: number; volume: number | null; lots?: number | null };
 export type JournalRow = { day: string; mood: number | null; plan: boolean | null };
 export type Flag = { lv: "red" | "yellow"; t: string };
-export type Level = "red" | "yellow" | "green";
+export type Level = Zone;
 
 export type DayStat = {
   day: string;
@@ -114,7 +114,7 @@ export function computeAccount(opts: {
     if (s.pnl_pct >= R.profitDayPct) profitDays++;
     days.push(s);
     const f = flagsAt(days, days.length - 1, R);
-    s.level = f.level; s.flags = f.flags;
+    s.flags = f.flags; s.level = zoneOf(s.total_pct, phase, R);
     if (s.breach) { status = "failed"; statusDay = day; break; }
     if (target !== null && s.total_pct >= target && profitDays >= R.minDays) { status = "passed"; statusDay = day; break; }
   }

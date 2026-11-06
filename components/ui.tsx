@@ -50,10 +50,10 @@ export function EquityChart({ days, target, max, h = 220 }: { days: Day[]; targe
   );
 }
 
-export function TempChart({ rows }: { rows: { day: string; red: number; yellow: number; green: number }[] }) {
+export function TempChart({ rows }: { rows: { day: string; red: number; yellow: number; work: number; green: number }[] }) {
   if (!rows.length) return <p className="fine">Данные появятся после первой синхронизации.</p>;
   const W = 640, H = 170, pl = 28, pr = 8, pt = 8, pb = 22, n = rows.length;
-  const max = Math.max(5, ...rows.map(c => c.red + c.yellow + c.green));
+  const max = Math.max(5, ...rows.map(c => c.red + c.yellow + c.work + c.green));
   const st = max > 20 ? 10 : 5, top = Math.ceil(max / st) * st, bw = (W - pl - pr) / n;
   const y = (v: number) => pt + ((top - v) * (H - pt - pb)) / top;
   const ticks: number[] = []; for (let v = 0; v <= top; v += st) ticks.push(v);
@@ -65,9 +65,9 @@ export function TempChart({ rows }: { rows: { day: string; red: number; yellow: 
         const x0 = pl + i * bw + bw * 0.18, w = bw * 0.64; let acc = 0;
         return (
           <g key={c.day}>
-            {(["green", "yellow", "red"] as const).map(k => {
+            {(["green", "work", "yellow", "red"] as const).map(k => {
               if (!c[k]) return null; const y1 = y(acc + c[k]), y0 = y(acc); acc += c[k];
-              return <rect key={k} x={x0} y={y1} width={w} height={y0 - y1} fill={k === "green" ? "var(--green)" : k === "yellow" ? "var(--amber)" : "var(--red)"} opacity={k === "green" ? 0.35 : 0.9}><title>{`${fmtD(c.day)}: ${LEVEL_LABEL[k]} — ${c[k]}`}</title></rect>;
+              return <rect key={k} x={x0} y={y1} width={w} height={y0 - y1} fill={k === "green" ? "var(--green)" : k === "work" ? "var(--gold-dim)" : k === "yellow" ? "var(--amber)" : "var(--red)"} opacity={k === "work" ? 0.55 : 0.9}><title>{`${fmtD(c.day)}: ${LEVEL_LABEL[k]} — ${c[k]}`}</title></rect>;
             })}
             {(i % every === 0 || i === n - 1) && <text x={x0 + w / 2} y={H - 6} textAnchor="middle">{fmtD(c.day)}</text>}
           </g>
