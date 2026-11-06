@@ -154,7 +154,10 @@ export function summarize(days: (Pick<DayStat, "traded" | "pnl_pct" | "total_pct
     todayTrades: last ? last.trades : 0,
     avgTrades: prev.length ? prev.reduce((a, d) => a + d.trades, 0) / prev.length : 0,
     maxDD: Math.max(-Math.min(0, ...days.map(d => Number(d.total_pct))), ...days.map(d => Number(d.dd_pct || 0))),
-    todayLoss: last ? Math.max(Number(last.day_loss_pct || 0), -Number(last.pnl_pct), 0) : 0,
+    // Текущий убыток дня: если день уже отбит в плюс — 0, как у пропа
+    todayLoss: last ? Math.max(0, -Number(last.pnl_pct)) : 0,
+    // Худшая точка дня с учётом плавающего убытка (для справки и риск-флагов)
+    todayWorst: last ? Math.max(Number(last.day_loss_pct || 0), -Number(last.pnl_pct), 0) : 0,
     curDD: last ? Math.max(0, -Number(last.total_pct)) : 0,
     tradingDays: traded.length,
     profitDays: traded.filter(d => Number(d.pnl_pct) >= profitDayPct).length,
