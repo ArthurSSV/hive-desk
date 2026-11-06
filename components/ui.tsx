@@ -45,7 +45,7 @@ export function EquityChart({ days, target, max, h = 220 }: { days: Day[]; targe
       <path d={path} fill="none" stroke="var(--hive)" strokeWidth={2} strokeLinejoin="round" />
       {days.map((d, i) => d.breach ? <circle key={i} cx={x(i)} cy={y(Number(d.total_pct))} r={5} fill="none" stroke="var(--red)" strokeWidth={2} /> : null)}
       <circle cx={x(days.length - 1)} cy={y(Number(L.total_pct))} r={4} fill={L.breach ? "var(--red)" : "var(--hive)"} stroke="var(--surface)" strokeWidth={2} />
-      {days.map((d, i) => (i % every === 0 || i === days.length - 1) ? <text key={"x" + i} x={x(i)} y={H - 6} textAnchor="middle">{fmtD(d.day)}</text> : null)}
+      {days.map((d, i) => ((i % every === 0 && days.length - 1 - i >= every / 2) || i === days.length - 1) ? <text key={"x" + i} x={x(i)} y={H - 6} textAnchor="middle">{fmtD(d.day)}</text> : null)}
     </svg>
   );
 }
@@ -69,7 +69,7 @@ export function TempChart({ rows }: { rows: { day: string; red: number; yellow: 
               if (!c[k]) return null; const y1 = y(acc + c[k]), y0 = y(acc); acc += c[k];
               return <rect key={k} x={x0} y={y1} width={w} height={y0 - y1} fill={k === "green" ? "var(--green)" : k === "work" ? "var(--gold-dim)" : k === "yellow" ? "var(--amber)" : "var(--red)"} opacity={k === "work" ? 0.55 : 0.9}><title>{`${fmtD(c.day)}: ${LEVEL_LABEL[k]} — ${c[k]}`}</title></rect>;
             })}
-            {(i % every === 0 || i === n - 1) && <text x={x0 + w / 2} y={H - 6} textAnchor="middle">{fmtD(c.day)}</text>}
+            {((i % every === 0 && n - 1 - i >= every / 2) || i === n - 1) && <text x={x0 + w / 2} y={H - 6} textAnchor="middle">{fmtD(c.day)}</text>}
           </g>
         );
       })}
@@ -94,4 +94,51 @@ export function Gauge({ k, v, sub, pct, col, note, icon }: { k: string; v: strin
       <div className="note">{note}</div>
     </div>
   );
+}
+
+/** Общая кривая группы: накопленный результат, % от общего капитала (сверху) и итог дня, $ (снизу). */
+export function GroupChart({ rows, sel }: { rows: { day: string; pnl: number; cumPct: number }[]; sel: string | null }) {
+  if (!rows.length) return <p className="fine">Данные появятся после первой синхронизации.</p>;
+  const W = 680, H = 300, pl = 54, pr = 14, top = 12, mid = 178, gap = 18, bot = H - 22;
+  const n = rows.length, step = (W - pl - pr) / n;
+  const cx = (i: number) => pl + i * step + step / 2;
+  const vals = rows.map(r => r.cumPct);
+  let lo = Math.min(0, ...vals), hi = Math.max(0, ...vals);
+  const pad = Math.max((hi - lo) * 0.15, 0.2); lo -= pad; hi += pad;
+  const y = (v: number) => top + ((hi - v) * (mid - top)) / (hi - lo);
+  const tick = niceStep((hi - lo) / 4);
+  const ticks: number[] = []; for (let t = Math.ceil(lo / tick) * tick; t <= hi + 1e-9; t += tick) ticks.push(+t.toFixed(4));
+  const bmax = Math.max(1, ...rows.map(r => Math.abs(r.pnl)));
+  const b0 = mid + gap + (bot - mid - gap) / 2, bh = (bot - mid - gap) / 2;
+  const by = (v: number) => b0 - (v / bmax) * bh;
+  const line = rows.map((r, i) => `${i ? "L" : "M"}${cx(i).toFixed(1)} ${y(r.cumPct).toFixed(1)}`).join("");
+  const area = `${line}L${cx(n - 1)} ${y(0)}L${cx(0)} ${y(0)}Z`;
+  const every = Math.ceil(n / 7);
+  const si = sel ? rows.findIndex(r => r.day === sel) : -1;
+  const last = rows[n - 1];
+  const usdS = (v: number) => (v < 0 ? "−$" : "+$") + Math.abs(Math.round(v)).toLocaleString("en-US");
+  return (
+    <svg className="chart" viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Общий результат группы по дням">
+      {si >= 0 && <rect x={pl + si * step} y={top} width={step} height={bot - top} fill="var(--gold)" opacity={0.08} />}
+      {ticks.map(t => <g key={t}><line x1={pl} x2={W - pr} y1={y(t)} y2={y(t)} stroke="var(--line)" strokeWidth={t === 0 ? 1.2 : 0.6} /><text x={pl - 6} y={y(t) + 3} textAnchor="end">{t > 0 ? "+" : ""}{t.toFixed(tick < 0.1 ? 2 : tick < 1 ? 1 : 0)}%</text></g>)}
+      <path d={area} fill="var(--gold)" opacity={0.1} />
+      <path d={line} fill="none" stroke="var(--gold)" strokeWidth={2} strokeLinejoin="round" />
+      <circle cx={cx(n - 1)} cy={y(last.cumPct)} r={4} fill="var(--gold)" stroke="var(--surface)" strokeWidth={2} />
+      <text x={Math.min(cx(n - 1), W - pr - 4)} y={y(last.cumPct) - 9} textAnchor="end" style={{ fill: "var(--gold2)", fontWeight: 600 }}>{last.cumPct > 0 ? "+" : ""}{last.cumPct.toFixed(2)}%</text>
+      <line x1={pl} x2={W - pr} y1={b0} y2={b0} stroke="var(--line2)" />
+      <text x={pl - 6} y={b0 - bh + 4} textAnchor="end">{usdS(bmax)}</text>
+      <text x={pl - 6} y={b0 + bh} textAnchor="end">{usdS(-bmax)}</text>
+      {rows.map((r, i) => {
+        const h = Math.abs(by(r.pnl) - b0);
+        return <rect key={r.day} x={cx(i) - step * 0.32} y={r.pnl >= 0 ? b0 - h : b0} width={step * 0.64} height={Math.max(h, r.pnl ? 1 : 0)} fill={r.pnl >= 0 ? "var(--green)" : "var(--red)"} opacity={i === si ? 1 : 0.75}><title>{`${fmtD(r.day)}: ${usdS(r.pnl)}`}</title></rect>;
+      })}
+      {rows.map((r, i) => ((i % every === 0 && n - 1 - i >= every / 2) || i === n - 1) ? <text key={"x" + r.day} x={cx(i)} y={H - 6} textAnchor="middle">{fmtD(r.day)}</text> : null)}
+    </svg>
+  );
+}
+
+function niceStep(raw: number) {
+  const p = Math.pow(10, Math.floor(Math.log10(Math.max(raw, 1e-6))));
+  const f = raw / p;
+  return (f <= 1 ? 1 : f <= 2 ? 2 : f <= 5 ? 5 : 10) * p;
 }

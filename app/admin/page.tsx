@@ -49,7 +49,7 @@ export default async function Admin() {
         <div><div className="k">Фаза 2</div><div className="v">{p2}</div></div>
         <div><div className="k">Funded</div><div className="v">{funded}</div></div>
         <div><div className="k">Failed</div><div className="v">{failed} <small>{withAcc.length ? Math.round((failed / withAcc.length) * 100) : 0}%</small></div></div>
-        <div><div className="k">Буксир</div><div className="v red">{red} <small>+{yel} предупр. · {near} у цели</small></div></div>
+        <div><div className="k">Буксир</div><div className="v red">{red}</div><div className="fine">предупр. {yel} · у цели {near}</div></div>
         <div><div className="k">Средняя просадка</div><div className="v">{avgDD.toFixed(1)}<small>%</small></div></div>
       </section>
       <div className="grid2">
