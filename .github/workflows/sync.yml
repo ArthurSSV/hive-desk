@@ -1,7 +1,7 @@
 name: Sync cTrader
 on:
   schedule:
-    - cron: "*/15 * * * *"
+    - cron: "17 */6 * * *"   # запасной запуск; основной — cron-job.org → /api/cron/sync
   workflow_dispatch:
 concurrency: { group: sync, cancel-in-progress: false }
 jobs:

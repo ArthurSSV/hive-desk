@@ -4,6 +4,7 @@ import { requireAdmin } from "@/lib/supabase";
 import { groupBundle } from "@/lib/data";
 import { TempChart, PhaseTag } from "@/components/ui";
 import AdminTable, { type Row } from "@/components/AdminTable";
+import CopyReport from "@/components/CopyReport";
 import { LEVEL_LABEL } from "@/lib/rules";
 
 export const dynamic = "force-dynamic";
@@ -13,6 +14,9 @@ const plural = (n: number) => { const a = n % 10, b = n % 100; return `${n} ${a 
 export default async function Admin() {
   const { sb } = await requireAdmin();
   const site = `https://${headers().get("host")}`;
+  const { data: st } = await sb.from("settings").select("invite_code").eq("id", 1).single();
+  const invite = (st as any)?.invite_code as string | null;
+  const regLink = `${site}/register${invite ? `?code=${encodeURIComponent(invite)}` : ""}`;
   const { traders: T, teams, temp, rules: R } = await groupBundle(sb);
   const teamName = new Map(teams.map(t => [t.id, t.name]));
   const withAcc = T.filter(t => t.acc);
@@ -30,21 +34,26 @@ export default async function Admin() {
   const dist: [number, string, string][] = [[p1, "var(--muted)", "Фаза 1"], [p2, "var(--hive)", "Фаза 2"], [funded, "var(--green)", "Funded"], [failed, "var(--red)", "Failed"], [noAcc, "var(--line)", "Без счёта"]];
 
   const rows: Row[] = T.map(t => ({
-    id: t.p.id, name: t.p.name, email: t.p.email, team: t.p.team_id ? teamName.get(t.p.team_id) ?? null : null, fresh: t.fresh, level: t.level, phase: t.acc?.phase ?? null, status: t.acc?.status ?? null,
+    id: t.p.id, name: t.p.name, email: t.p.email, unconfirmed: !!t.acc && !t.acc.balance_locked, team: t.p.team_id ? teamName.get(t.p.team_id) ?? null : null, fresh: t.fresh, level: t.level, phase: t.acc?.phase ?? null, status: t.acc?.status ?? null,
     size: t.acc?.initial_balance ?? null, total: t.m.total, today: t.m.today, maxDD: t.m.maxDD, days: t.m.profitDays, trades: t.m.todayTrades,
     avgTrades: t.m.avgTrades, mood: t.m.mood, flags: t.flags.map(f => f.t).join(" · "), target: t.acc?.phase === 1 ? R.p1 : t.acc?.phase === 2 ? R.p2 : null,
   }));
 
   if (!T.length) return (
-    <div className="head"><div><h1>Группа пуста</h1><p className="sub">Трейдеры появятся здесь автоматически, как только зарегистрируются по ссылке <span className="mono">{site}/register</span> и подключат cTrader.</p></div></div>
+    <div className="head"><div><h1>Группа пуста</h1><p className="sub">Трейдеры появятся здесь автоматически, как только зарегистрируются по ссылке <span className="mono">{regLink}</span> и подключат cTrader.</p></div></div>
   );
 
   return (
     <>
       <div className="head"><div>
         <div className="titlerow"><h1>Группа челленджа</h1><span className="count">{plural(T.length)}{fresh ? <small>+{fresh} сегодня</small> : null}</span></div>
-        <p className="sub">Classic 2-step · {lastSync ? `данные cTrader на ${new Date(lastSync).toLocaleString("ru-RU", { timeZone: "Europe/Kiev", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" })}` : "ждём первую синхронизацию"} · ссылка для регистрации: <span className="mono">{site}/register</span></p>
+        <p className="sub">Classic 2-step · {lastSync ? `данные cTrader на ${new Date(lastSync).toLocaleString("ru-RU", { timeZone: "Europe/Kiev", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" })}` : "ждём первую синхронизацию"} · ссылка для регистрации: <span className="mono">{regLink}</span></p>
       </div></div>
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+        <CopyReport text={regLink} label="Скопировать ссылку для регистрации" ghost />
+        {!invite && <span className="fine" style={{ color: "var(--amber)" }}>Код приглашения не задан — зарегистрироваться может любой. Задайте его в «Правилах».</span>}
+        {T.some(t => t.acc && !t.acc.balance_locked) && <span className="fine" style={{ color: "var(--amber)" }}>⚠ Ждут подтверждения баланса: {T.filter(t => t.acc && !t.acc.balance_locked).map(t => t.p.name).join(", ")}</span>}
+      </div>
       <section className="strip" aria-label="Сводка">
         <div><div className="k">Фаза 1</div><div className="v">{p1}</div></div>
         <div><div className="k">Фаза 2</div><div className="v">{p2}</div></div>

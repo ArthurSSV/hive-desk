@@ -16,7 +16,7 @@ export async function GET(req: NextRequest) {
   const saved = cookies().get("ct_state")?.value;
   cookies().delete("ct_state");
   if (!code) return fail(req.nextUrl.searchParams.get("error_description") || "cTrader не вернул код доступа");
-  if (saved && state && saved !== state) return fail("Сессия подключения устарела, попробуйте ещё раз");
+  if (!saved || !state || saved !== state) return fail("Сессия подключения устарела. Нажмите «Войти через cTrader ID» ещё раз");
 
   try {
     const tok = await exchangeCode(code, `${base}/api/ctrader/callback`);

@@ -1,6 +1,6 @@
 import { requireAdmin } from "@/lib/supabase";
 import { rulesOf } from "@/lib/data";
-import { saveRules } from "@/app/actions";
+import { saveInvite, saveRules } from "@/app/actions";
 
 export const dynamic = "force-dynamic";
 
@@ -20,9 +20,21 @@ const field = (R: any) => ([k, l, step, min]: F) => <label key={k} htmlFor={`r-$
 export default async function RulesPage({ searchParams }: { searchParams: { saved?: string } }) {
   const { sb } = await requireAdmin();
   const R: any = await rulesOf(sb);
+  const { data: st } = await sb.from("settings").select("invite_code").eq("id", 1).single();
+  const invite = ((st as any)?.invite_code as string | null) || "";
   return (
     <>
       <div className="head"><div><h1>Правила и пороги</h1><p className="sub">Зоны светофора применяются сразу после сохранения. Параметры челленджа пересчитаются при следующей синхронизации (до 15 минут).</p></div></div>
+      <section className="panel">
+        <div className="ph"><h2>Регистрация</h2>{invite ? <span className="pill l-green"><span className="dot" />По коду</span> : <span className="pill l-yellow"><span className="dot" />Открыта всем</span>}</div>
+        <form action={saveInvite} style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "end" }}>
+          <label className="field" htmlFor="r-invite" style={{ minWidth: 220 }}>Код приглашения<input id="r-invite" name="invite" defaultValue={invite} placeholder="например MATR2026" maxLength={40} autoComplete="off" /></label>
+          <button className="btn" type="submit">Сохранить код</button>
+          <button className="btn ghost" type="submit" name="gen" value="1">Сгенерировать новый</button>
+        </form>
+        <p className="fine" style={{ marginTop: 10 }}>Без кода зарегистрироваться нельзя. Ссылка с кодом — на странице «Группа», кнопка «Скопировать ссылку для регистрации». Новый код не влияет на тех, кто уже зарегистрирован. Пустое поле открывает регистрацию всем.</p>
+        {searchParams.saved === "invite" && <p className="saved" style={{ marginTop: 6 }}>Код сохранён</p>}
+      </section>
       <form action={saveRules} style={{ display: "grid", gap: 20 }}>
         <section className="panel"><div className="ph"><h2>Зоны светофора</h2><span className="fine">по результату фазы, % от начального баланса</span></div>
           <div className="zones">
@@ -56,7 +68,7 @@ export default async function RulesPage({ searchParams }: { searchParams: { save
           </div>
           <p className="fine" style={{ marginTop: 10 }}>Трейдеры со срочными флагами попадают в «Требуют внимания» даже в зелёной зоне.</p>
         </section>
-        <div style={{ display: "flex", gap: 12, alignItems: "center" }}><button className="btn" type="submit">Сохранить</button>{searchParams.saved && <span className="saved">Сохранено</span>}</div>
+        <div style={{ display: "flex", gap: 12, alignItems: "center" }}><button className="btn" type="submit">Сохранить</button>{searchParams.saved && searchParams.saved !== "invite" && <span className="saved">Сохранено</span>}</div>
       </form>
     </>
   );

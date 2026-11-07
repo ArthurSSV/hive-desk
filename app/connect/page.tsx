@@ -16,19 +16,20 @@ export default async function Connect({ searchParams }: { searchParams: { error?
         <div className="ph"><h2>cTrader</h2></div>
         <a className="btn" href="/api/ctrader/connect">{accounts?.length ? "Обновить доступ cTrader" : "Войти через cTrader ID"}</a>
         {accounts?.length ? <>
-          <p className="fine" style={{ margin: 0 }}>Выберите счёт челленджа, который нужно отслеживать. Начальный баланс — размер счёта, например 50000. Если оставить пустым, он посчитается по истории сделок.</p>
+          <p className="fine" style={{ margin: 0 }}>Выберите счёт челленджа, который нужно отслеживать. Начальный баланс — размер счёта, например 50000. Админ группы проверит и подтвердит этап и баланс, после этого их меняет только он.</p>
           {accounts.map((a: any) => (
             <div className="acc" key={a.id}>
               <div style={{ minWidth: 0 }}>
                 <b>#{a.trader_login || a.ctid_trader_account_id}</b> <span className="fine">{a.broker_name || ""} · {a.is_live ? "live" : "demo"}{a.balance != null ? ` · баланс ${usd(a.balance)}` : ""}</span>
                 {a.active && <div className="ok">Отслеживается · {PHASE_LABEL[a.phase]}</div>}
+                {a.balance_locked ? <div className="fine">✓ Этап и баланс подтверждены админом</div> : a.active ? <div className="fine" style={{ color: "var(--amber)" }}>Ждёт подтверждения админом</div> : null}
               </div>
               <form action={activateAccount}>
                 <input type="hidden" name="id" value={a.id} />
                 <label className="field" htmlFor={`ph-${a.id}`}>Этап
-                  <select id={`ph-${a.id}`} name="phase" defaultValue={a.phase}><option value="1">Фаза 1</option><option value="2">Фаза 2</option><option value="3">Funded</option></select></label>
+                  <select id={`ph-${a.id}`} name="phase" defaultValue={a.phase} disabled={a.balance_locked}><option value="1">Фаза 1</option><option value="2">Фаза 2</option><option value="3">Funded</option></select></label>
                 <label className="field" htmlFor={`in-${a.id}`}>Начальный баланс, $
-                  <input id={`in-${a.id}`} name="initial" type="number" min="100" step="1" defaultValue={a.initial_balance ?? ""} placeholder="50000" /></label>
+                  <input id={`in-${a.id}`} name="initial" type="number" min="100" step="1" defaultValue={a.initial_balance ?? ""} placeholder="50000" disabled={a.balance_locked} /></label>
                 <button className="btn" type="submit">{a.active ? "Сохранить" : "Отслеживать"}</button>
               </form>
             </div>

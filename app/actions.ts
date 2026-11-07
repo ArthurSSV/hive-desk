@@ -27,16 +27,24 @@ export async function activateAccount(fd: FormData) {
   const id = Number(fd.get("id"));
   const phase = Number(fd.get("phase"));
   const initial = fd.get("initial") ? Number(fd.get("initial")) : null;
-  if (![1, 2, 3].includes(phase)) return;
+  if (![1, 2, 3].includes(phase) || (initial != null && !(initial >= 100 && initial <= 10_000_000))) redirect("/connect?error=" + encodeURIComponent("Проверьте этап и начальный баланс"));
+  const { data: acc } = await sb.from("ctrader_accounts").select("id,balance_locked").eq("id", id).eq("user_id", profile.id).single();
+  if (!acc) redirect("/connect");
   // Одновременно отслеживается один счёт — остальные выключаем
   await sb.from("ctrader_accounts").update({ active: false }).eq("user_id", profile.id).neq("id", id);
-  await sb.from("ctrader_accounts").update({ active: true, phase, initial_balance: initial, status: "active", status_day: null }).eq("id", id).eq("user_id", profile.id);
+  // Подтверждённые админом этап и баланс трейдер не меняет (это же проверяет база)
+  const { error } = await sb.from("ctrader_accounts").update(acc.balance_locked ? { active: true } : { active: true, phase, initial_balance: initial }).eq("id", id).eq("user_id", profile.id);
+  if (error) redirect("/connect?error=" + encodeURIComponent(error.message));
   try { await syncAll(serviceClient(), { userId: profile.id }); } catch { /* воркер повторит */ }
   redirect("/dashboard");
 }
 
 export async function syncMe() {
-  const { profile } = await requireUser();
+  const { sb, profile } = await requireUser();
+  // Не чаще раза в минуту, чтобы не упираться в лимиты cTrader
+  const { data: accs } = await sb.from("ctrader_accounts").select("last_synced_at").eq("user_id", profile.id).eq("active", true);
+  const last = Math.max(0, ...(accs || []).map(a => (a.last_synced_at ? Date.parse(a.last_synced_at) : 0)));
+  if (Date.now() - last < 60_000) { revalidatePath("/dashboard"); return; }
   await syncAll(serviceClient(), { userId: profile.id });
   revalidatePath("/dashboard");
 }
@@ -102,4 +110,24 @@ export async function assignTeams(fd: FormData) {
   for (const [t, users] of groups) await sb.from("profiles").update({ team_id: t ? Number(t) : null }).in("id", users);
   revalidatePath("/admin/teams"); revalidatePath("/admin"); revalidatePath("/admin/summary");
   redirect("/admin/teams?ok=assigned");
+}
+
+// ---------- Админ: подтверждение счёта и код приглашения ----------
+export async function confirmAccount(fd: FormData) {
+  const { sb } = await requireAdmin();
+  const id = Number(fd.get("id")), user = String(fd.get("user")), phase = Number(fd.get("phase")), initial = Number(fd.get("initial"));
+  if (![1, 2, 3].includes(phase) || !(initial >= 100)) redirect(`/admin/trader/${user}?e=account`);
+  await sb.from("ctrader_accounts").update({ phase, initial_balance: initial, balance_locked: fd.get("lock") !== "0" }).eq("id", id);
+  try { await syncAll(serviceClient(), { userId: user }); } catch { /* повторит крон */ }
+  revalidatePath(`/admin/trader/${user}`); revalidatePath("/admin");
+  redirect(`/admin/trader/${user}?ok=account`);
+}
+
+export async function saveInvite(fd: FormData) {
+  const { sb } = await requireAdmin();
+  let code = String(fd.get("invite") || "").trim();
+  if (fd.get("gen")) code = Array.from(crypto.getRandomValues(new Uint8Array(5)), b => "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"[b % 32]).join("");
+  await sb.from("settings").update({ invite_code: code.slice(0, 40) || null }).eq("id", 1);
+  revalidatePath("/admin/rules"); revalidatePath("/admin");
+  redirect("/admin/rules?saved=invite");
 }

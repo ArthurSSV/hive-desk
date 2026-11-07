@@ -145,15 +145,18 @@ async function notify(sb: SupabaseClient, acc: Account, out: Awaited<ReturnType<
 }
 
 /** Синхронизирует все активные счета (или счета одного трейдера). */
-export async function syncAll(sb: SupabaseClient, opts: { userId?: string; log?: (s: string) => void } = {}) {
+/** budgetMs — лимит времени: счета идут от давно не обновлявшихся, остальные подождут следующего запуска. */
+export async function syncAll(sb: SupabaseClient, opts: { userId?: string; log?: (s: string) => void; budgetMs?: number } = {}) {
   const log = opts.log || (() => {});
+  const t0 = Date.now();
   const rules = await loadRules(sb);
-  let q = sb.from("ctrader_accounts").select("*").eq("active", true);
+  let q = sb.from("ctrader_accounts").select("*").eq("active", true).order("last_synced_at", { ascending: true, nullsFirst: true });
   if (opts.userId) q = q.eq("user_id", opts.userId);
   const { data: accounts, error } = await q;
   if (error) throw error;
-  let ok = 0, failed = 0;
+  let ok = 0, failed = 0, skipped = 0;
   for (const acc of (accounts || []) as Account[]) {
+    if (opts.budgetMs && Date.now() - t0 > opts.budgetMs) { skipped++; continue; }
     try {
       let initial = acc.initial_balance;
       if (acc.status === "active" || initial == null) ({ initial } = await pullDeals(sb, acc));
@@ -166,8 +169,8 @@ export async function syncAll(sb: SupabaseClient, opts: { userId?: string; log?:
       await sb.from("ctrader_accounts").update({ sync_error: String(e.message).slice(0, 300), last_synced_at: new Date().toISOString() }).eq("id", acc.id);
     }
   }
-  await syncChain(sb, log).catch(e => log("chain: " + e.message));
-  return { ok, failed };
+  if (!opts.budgetMs || Date.now() - t0 < opts.budgetMs) await syncChain(sb, log).catch(e => log("chain: " + e.message));
+  return { ok, failed, skipped };
 }
 
 /** On-chain: USDC-переводы между кошельком трейдера и адресами FundedHive (необязательно). */
