@@ -59,6 +59,8 @@ export async function groupBundle(sb: SupabaseClient) {
     sb.from("journal").select("user_id,day,mood").gte("day", since),
     rulesOf(sb),
   ]);
+  const { data: teamRows } = await sb.from("teams").select("id,name,curator").order("name");
+  const teams = (teamRows || []) as { id: number; name: string; curator: string | null }[];
   const accByUser = new Map<string, Account[]>();
   for (const a of (accounts || []) as Account[]) { if (!accByUser.has(a.user_id)) accByUser.set(a.user_id, []); accByUser.get(a.user_id)!.push(a); }
   const moods = new Map((journal || []).map((j: any) => [j.user_id + j.day, j.mood]));
@@ -79,7 +81,7 @@ export async function groupBundle(sb: SupabaseClient) {
     if (!temp.has(d.day)) temp.set(d.day, { day: d.day, red: 0, yellow: 0, work: 0, green: 0 });
     const r = temp.get(d.day)! as any; if (d.level in r) r[d.level]++;
   }
-  return { traders, temp: [...temp.values()].sort((a, b) => a.day.localeCompare(b.day)).slice(-22), rules };
+  return { traders, teams, temp: [...temp.values()].sort((a, b) => a.day.localeCompare(b.day)).slice(-22), rules };
 }
 
 export type Period = "day" | "week" | "month" | "all";
@@ -95,31 +97,86 @@ function periodLabel(key: string, p: Period, first: string, last: string) {
   return { short: "Всё время", long: `С ${dd(first)}.${first.slice(0, 4)} по ${dd(last)}.${last.slice(0, 4)}` };
 }
 
-/** Сводка по всем текущим счетам группы за день, неделю, месяц или всё время. */
-export async function summaryBundle(sb: SupabaseClient, opts: { day?: string; period?: string } = {}) {
+export type Team = { id: number; name: string; curator: string | null };
+type Member = { p: any; acc: Account };
+
+/** Сводка за день, неделю, месяц или всё время — по всей группе, по команде или по выбранным трейдерам. */
+export async function summaryBundle(sb: SupabaseClient, opts: { day?: string; period?: string; scope?: string; pick?: string[] } = {}) {
   const period: Period = (["day", "week", "month", "all"] as const).includes(opts.period as Period) ? (opts.period as Period) : "day";
-  const [{ data: profiles }, { data: accounts }, rules] = await Promise.all([
-    sb.from("profiles").select("id,name,email").eq("role", "trader").order("created_at"),
+  const [{ data: profiles }, { data: accounts }, { data: teamRows }, rules] = await Promise.all([
+    sb.from("profiles").select("*").eq("role", "trader").order("created_at"),
     sb.from("ctrader_accounts").select("*"),
+    sb.from("teams").select("id,name,curator").order("name"),
     rulesOf(sb),
   ]);
+  const teams = (teamRows || []) as Team[];
   const byUser = new Map<string, Account[]>();
   for (const a of (accounts || []) as Account[]) { if (!byUser.has(a.user_id)) byUser.set(a.user_id, []); byUser.get(a.user_id)!.push(a); }
-  const members = (profiles || []).map((p: any) => ({ p, acc: currentAccount(byUser.get(p.id) || []) })).filter(m => m.acc && m.acc.initial_balance) as { p: any; acc: Account }[];
-  const ids = members.map(m => m.acc.id);
+  const everyone = (profiles || []).map((p: any) => ({ p, acc: currentAccount(byUser.get(p.id) || []) }));
+  const allMembers = everyone.filter(m => m.acc && m.acc.initial_balance) as Member[];
+  const ids = allMembers.map(m => m.acc.id);
   const rows = ids.length
     ? await fetchAll<any>(() => sb.from("daily_stats").select("account_id,day,pnl,pnl_pct,total_pct,trades,breach").in("account_id", ids).order("day").order("account_id"))
     : [];
+  const rowsByAcc = new Map<number, any[]>();
+  for (const r of rows) { if (!rowsByAcc.has(r.account_id)) rowsByAcc.set(r.account_id, []); rowsByAcc.get(r.account_id)!.push(r); }
+
+  // Кого показываем
+  const scopeRaw = opts.scope || "all";
+  const pick = new Set(opts.pick || []);
+  const teamOf = (m: Member) => m.p.team_id as number | null;
+  let scope = { key: "all", name: "Вся группа", short: "Группа" };
+  let members = allMembers;
+  if (scopeRaw.startsWith("team-")) {
+    const t = teams.find(x => "team-" + x.id === scopeRaw);
+    if (t) { scope = { key: scopeRaw, name: t.name, short: t.name }; members = allMembers.filter(m => teamOf(m) === t.id); }
+  } else if (scopeRaw === "none") {
+    scope = { key: "none", name: "Без команды", short: "Без команды" }; members = allMembers.filter(m => !teamOf(m));
+  } else if (scopeRaw === "pick" && pick.size) {
+    members = allMembers.filter(m => pick.has(m.p.id));
+    scope = { key: "pick", name: `Выборка · ${members.length} чел.`, short: "Выборка" };
+  }
+
+  // Календарь торговых дней — общий для всей группы, чтобы периоды совпадали при любом выборе
+  const allDays = [...new Set(rows.map(r => r.day as string))].sort();
+  const base = { period, rules, teams, scope, picker: allMembers.map(m => ({ id: m.p.id as string, name: m.p.name as string, team: teamOf(m) })), pick: [...pick] };
+  if (!allDays.length) return { ...base, empty: true as const, count: members.length };
+  const keys = [...new Set(allDays.map(d => periodKey(d, period)))];
+  const anchor = opts.day && /^\d{4}-\d{2}-\d{2}$/.test(opts.day) ? opts.day : allDays[allDays.length - 1];
+  let key = periodKey(anchor, period);
+  if (!keys.includes(key)) key = keys.filter(k => k <= key).pop() || keys[keys.length - 1];
+  const ki = keys.indexOf(key);
+  const inKey = allDays.filter(d => periodKey(d, period) === key);
+  const start = inKey[0], end = inKey[inKey.length - 1];
+  const lastDayOf = (k: string) => allDays.filter(d => periodKey(d, period) === k).pop()!;
+
+  const agg = (ms: Member[]) => aggregate(ms, rowsByAcc, rules, period, start, end);
+  const main = agg(members);
+
+  // Сравнение команд за тот же период
+  const groups: { key: string; name: string; curator: string | null; ms: Member[] }[] = teams.map(t => ({ key: "team-" + t.id, name: t.name, curator: t.curator, ms: allMembers.filter(m => teamOf(m) === t.id) }));
+  const loose = allMembers.filter(m => !teamOf(m));
+  if (teams.length && loose.length) groups.push({ key: "none", name: "Без команды", curator: null, ms: loose });
+  const compare = groups.map(g => {
+    const a = agg(g.ms);
+    return { key: g.key, name: g.name, curator: g.curator, count: g.ms.length, capital: a.capital, pnl: a.sum.pnl, pct: a.sum.pct, cum: a.sum.cum, cumPct: a.sum.cumPct, plus: a.sum.plus, minus: a.sum.minus, zones: a.zones, phases: a.phases };
+  }).sort((x, y) => y.pct - x.pct);
+
+  return {
+    ...base, empty: false as const, ...main,
+    key, start, end, label: periodLabel(key, period, start, end), anchor: end,
+    prev: ki > 0 ? lastDayOf(keys[ki - 1]) : null, next: ki < keys.length - 1 ? lastDayOf(keys[ki + 1]) : null,
+    compare,
+  };
+}
+
+/** Итоги набора счетов за период [start, end]. */
+function aggregate(members: Member[], rowsByAcc: Map<number, any[]>, rules: ReturnType<typeof normalizeRules>, period: Period, start: string, end: string) {
   const capital = members.reduce((a, m) => a + Number(m.acc.initial_balance), 0);
   const balance = members.reduce((a, m) => a + Number(m.acc.balance ?? m.acc.initial_balance), 0);
-
-  // Итоги группы по дням и накопленный результат
   type DayAgg = { day: string; pnl: number; trades: number; plus: number; minus: number; cum: number; cumPct: number; pct: number };
   const map = new Map<string, DayAgg>();
-  const rowsByAcc = new Map<number, any[]>();
-  for (const r of rows) {
-    if (!rowsByAcc.has(r.account_id)) rowsByAcc.set(r.account_id, []);
-    rowsByAcc.get(r.account_id)!.push(r);
+  for (const m of members) for (const r of rowsByAcc.get(m.acc.id) || []) {
     if (!map.has(r.day)) map.set(r.day, { day: r.day, pnl: 0, trades: 0, plus: 0, minus: 0, cum: 0, cumPct: 0, pct: 0 });
     const d = map.get(r.day)!, pnl = Number(r.pnl);
     d.pnl += pnl; d.trades += r.trades; if (pnl > 0) d.plus++; else if (pnl < 0) d.minus++;
@@ -127,19 +184,10 @@ export async function summaryBundle(sb: SupabaseClient, opts: { day?: string; pe
   const days = [...map.values()].sort((a, b) => a.day.localeCompare(b.day));
   let cum = 0;
   for (const d of days) { cum += d.pnl; d.cum = cum; d.cumPct = capital ? (cum / capital) * 100 : 0; d.pct = capital ? (d.pnl / capital) * 100 : 0; }
-  if (!days.length) return { period, rules, capital, balance, count: members.length, empty: true as const };
+  const inP = days.filter(d => d.day >= start && d.day <= end);
+  const upTo = days.filter(d => d.day <= end);
+  const endDay = upTo[upTo.length - 1];
 
-  // Выбранный период и соседние
-  const keys = [...new Set(days.map(d => periodKey(d.day, period)))];
-  const anchor = opts.day && /^\d{4}-\d{2}-\d{2}$/.test(opts.day) ? opts.day : days[days.length - 1].day;
-  let key = periodKey(anchor, period);
-  if (!keys.includes(key)) key = keys.filter(k => k <= key).pop() || keys[keys.length - 1];
-  const ki = keys.indexOf(key);
-  const inP = days.filter(d => periodKey(d.day, period) === key);
-  const start = inP[0].day, end = inP[inP.length - 1].day;
-  const lastDayOf = (k: string) => days.filter(d => periodKey(d.day, period) === k).pop()!.day;
-
-  // Вклад каждого трейдера за период
   const traders = members.map(({ p, acc }) => {
     const all = rowsByAcc.get(acc.id) || [];
     const own = all.filter(r => r.day >= start && r.day <= end);
@@ -148,7 +196,7 @@ export async function summaryBundle(sb: SupabaseClient, opts: { day?: string; pe
     const size = Number(acc.initial_balance);
     const failedBy = acc.status === "failed" && all.some(r => r.breach && r.day <= end);
     return {
-      id: p.id, name: p.name, phase: acc.phase, failed: failedBy, size, has: own.length > 0,
+      id: p.id as string, name: p.name as string, team: p.team_id as number | null, phase: acc.phase, failed: failedBy, size,
       pnl: own.length ? pnl : null, pnlPct: own.length ? (pnl / size) * 100 : null,
       total: endRow ? Number(endRow.total_pct) : null, trades: own.reduce((a, r) => a + r.trades, 0),
       plusDays: own.filter(r => Number(r.pnl) > 0).length, minusDays: own.filter(r => Number(r.pnl) < 0).length,
@@ -161,24 +209,19 @@ export async function summaryBundle(sb: SupabaseClient, opts: { day?: string; pe
   for (const t of traders) if (t.zone in zones) zones[t.zone]++;
   const phases = { p1: 0, p2: 0, funded: 0, failed: 0 };
   for (const t of traders) { if (t.failed) phases.failed++; else if (t.phase === 1) phases.p1++; else if (t.phase === 2) phases.p2++; else phases.funded++; }
-  const endDay = inP[inP.length - 1];
   const plus = traders.filter(t => (t.pnl ?? 0) > 0).length, minus = traders.filter(t => (t.pnl ?? 0) < 0).length;
   const sortedDays = [...inP].sort((a, b) => b.pnl - a.pnl);
 
-  // График: всё время целиком, иначе ~45 торговых дней по конец периода
-  const endIdx = days.findIndex(d => d.day === end);
-  let chart = period === "all" ? days : days.slice(Math.max(0, endIdx + 1 - Math.max(45, inP.length + 10)), endIdx + 1);
-  // пустые дни до первых сделок не показываем
+  const endIdx = upTo.length - 1;
+  let chart = period === "all" ? upTo : upTo.slice(Math.max(0, endIdx + 1 - Math.max(45, inP.length + 10)));
   const firstMove = chart.findIndex(d => d.pnl !== 0);
   if (firstMove > 1) chart = chart.slice(firstMove - 1);
-  const table = period === "day" ? days.slice(Math.max(0, endIdx - 13), endIdx + 1) : inP;
+  const table = period === "day" ? upTo.slice(Math.max(0, endIdx - 13)) : inP;
 
   return {
-    period, rules, capital, balance, count: members.length, empty: false as const,
-    key, start, end, label: periodLabel(key, period, start, end), anchor: end,
-    prev: ki > 0 ? lastDayOf(keys[ki - 1]) : null, next: ki < keys.length - 1 ? lastDayOf(keys[ki + 1]) : null,
+    capital, balance, count: members.length,
     sum: {
-      pnl, pct: capital ? (pnl / capital) * 100 : 0, cum: endDay.cum, cumPct: endDay.cumPct, trades: inP.reduce((a, d) => a + d.trades, 0),
+      pnl, pct: capital ? (pnl / capital) * 100 : 0, cum: endDay?.cum ?? 0, cumPct: endDay?.cumPct ?? 0, trades: inP.reduce((a, d) => a + d.trades, 0),
       plus, minus, flat: members.length - plus - minus, tradingDays: inP.length,
       bestDay: inP.length > 1 ? sortedDays[0] : null, worstDay: inP.length > 1 ? sortedDays[sortedDays.length - 1] : null,
     },

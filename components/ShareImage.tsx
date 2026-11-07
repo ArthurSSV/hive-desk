@@ -5,6 +5,7 @@ import { useState } from "react";
 export type CardData = {
   file: string;                    // имя файла без .png
   caption: string;                 // «Сводка группы» / «Сводка за неделю»
+  heroLabel?: string;              // «ИТОГ ГРУППЫ» / «ИТОГ КОМАНДЫ»
   date: string;                    // «06.11.2026» / «02.11–08.11.2026»
   heroPct: number; heroUsd: number; capital: number;
   curve: { day: string; v: number }[];
@@ -50,11 +51,12 @@ export async function drawCard(d: CardData): Promise<HTMLCanvasElement> {
   ctx.save(); ctx.translate(80, 74); ctx.scale(44 / 24, 44 / 24); ctx.strokeStyle = C.gold; ctx.lineWidth = 1.6; ctx.lineCap = "round";
   ctx.stroke(new Path2D(LOGO[0])); ctx.stroke(new Path2D(LOGO[1])); ctx.beginPath(); ctx.arc(12, 7.4, 2.6, 0, Math.PI * 2); ctx.fillStyle = C.gold; ctx.fill(); ctx.restore();
   txt(ctx, "МАТРЁШКА — ЧЕЛЛЕНДЖ", 140, 111, `800 28px ${SANS}`, C.fg, "left", 2.2);
-  txt(ctx, d.caption, W - 80, 88, `700 22px ${SANS}`, C.muted, "right");
+  let cs = 22; ctx.font = `700 ${cs}px ${SANS}`; while (ctx.measureText(d.caption).width > 380 && cs > 15) { cs--; ctx.font = `700 ${cs}px ${SANS}`; }
+  txt(ctx, d.caption, W - 80, 88, `700 ${cs}px ${SANS}`, C.muted, "right");
   txt(ctx, d.date, W - 80, 126, `700 30px ${MONO}`, C.gold2, "right");
 
   // главный показатель
-  txt(ctx, "ИТОГ ГРУППЫ", 80, 214, `800 22px ${SANS}`, C.gold, "left", 3);
+  txt(ctx, (d.heroLabel || "Итог группы").toUpperCase(), 80, 214, `800 22px ${SANS}`, C.gold, "left", 3);
   const heroCol = d.heroPct > 0 ? C.green : d.heroPct < 0 ? C.red : C.fg;
   let fs = 150; ctx.font = `700 ${fs}px ${MONO}`;
   while (ctx.measureText(sg(d.heroPct)).width > 560 && fs > 90) { fs -= 6; ctx.font = `700 ${fs}px ${MONO}`; }

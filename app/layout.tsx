@@ -27,6 +27,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             <nav className="tabs" aria-label="Разделы">
               {admin && <Link href="/admin">Группа</Link>}
               {admin && <Link href="/admin/summary">Сводка</Link>}
+              {admin && <Link href="/admin/teams">Команды</Link>}
               {admin && <Link href="/admin/rules">Правила</Link>}
               {!admin && <Link href="/dashboard">Мой кабинет</Link>}
               <form action={signOut}><button className="signout" type="submit">Выйти</button></form>

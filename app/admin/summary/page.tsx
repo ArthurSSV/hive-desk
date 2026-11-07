@@ -5,6 +5,7 @@ import { LEVEL_LABEL, PHASE_LABEL } from "@/lib/rules";
 import { GroupChart, Pill, cls, fmtD, sg } from "@/components/ui";
 import CopyReport from "@/components/CopyReport";
 import ShareImage, { type CardData } from "@/components/ShareImage";
+import ScopePicker from "@/components/ScopePicker";
 
 export const dynamic = "force-dynamic";
 
@@ -12,14 +13,25 @@ const money = (v: number, signed = false) => (signed ? (v > 0 ? "+" : v < 0 ? "�
 const TABS: [Period, string][] = [["day", "День"], ["week", "Неделя"], ["month", "Месяц"], ["all", "Всё время"]];
 const FOR: Record<Period, string> = { day: "за день", week: "за неделю", month: "за месяц", all: "за всё время" };
 
-export default async function Summary({ searchParams }: { searchParams: { day?: string; period?: string } }) {
+export default async function Summary({ searchParams }: { searchParams: { day?: string; period?: string; scope?: string; u?: string | string[] } }) {
   const { sb } = await requireAdmin();
-  const S = await summaryBundle(sb, { day: searchParams.day, period: searchParams.period });
-  if (!S.count || S.empty) return (
+  const u = searchParams.u == null ? [] : Array.isArray(searchParams.u) ? searchParams.u : [searchParams.u];
+  const S = await summaryBundle(sb, { day: searchParams.day, period: searchParams.period, scope: searchParams.scope, pick: u });
+  if (S.empty) return (
     <div className="head"><div><h1>Сводка группы</h1><p className="sub">Сводка появится, когда хотя бы один трейдер подключит счёт и укажет начальный баланс.</p></div></div>
   );
+  const scopeQ = `&scope=${S.scope.key}${S.scope.key === "pick" ? S.pick.map(i => `&u=${i}`).join("") : ""}`;
+  const scopeOpts = [{ key: "all", label: "Вся группа" }, ...S.teams.map(t => ({ key: "team-" + t.id, label: t.name })), ...(S.teams.length && S.picker.some(p => !p.team) ? [{ key: "none", label: "Без команды" }] : [])];
+  const picker = <ScopePicker options={scopeOpts} current={S.scope.key} people={S.picker} teams={S.teams} pick={S.pick} base={`/admin/summary?period=${S.period}&day=${S.anchor}`} />;
+  const isAll = S.scope.key === "all";
+  if (!S.count) return (
+    <>
+      <div className="head"><div><h1>Сводка · {S.scope.name}</h1><p className="sub">В этой выборке нет трейдеров с подключённым счётом и начальным балансом.</p></div></div>
+      {picker}
+    </>
+  );
   const P = S.period, sum = S.sum, day = P === "day";
-  const href = (p: Period, d = S.anchor) => `/admin/summary?period=${p}&day=${d}`;
+  const href = (p: Period, d = S.anchor) => `/admin/summary?period=${p}&day=${d}${scopeQ}`;
   const best = S.traders.find(t => (t.pnl ?? 0) > 0);
   const worst = [...S.traders].reverse().find(t => (t.pnl ?? 0) < 0);
   const attention = S.traders.filter(t => t.zone === "red" || t.zone === "yellow");
@@ -27,7 +39,7 @@ export default async function Summary({ searchParams }: { searchParams: { day?: 
   const year = S.end.slice(0, 4);
 
   const report = [
-    `📊 Матрёшка — Челлендж · сводка ${titleFor}`,
+    `📊 Матрёшка — Челлендж${isAll ? "" : ` · ${S.scope.name}`} · сводка ${titleFor}`,
     `Счетов: ${S.count} · капитал ${money(S.capital)}`,
     `${day ? "День" : "Период"}: ${money(sum.pnl, true)} (${sg(sum.pct)}%) · в плюсе ${sum.plus}, в минусе ${sum.minus}, без сделок ${sum.flat}`,
     !day ? `Торговых дней: ${sum.tradingDays} · сделок: ${sum.trades}` : `Сделок: ${sum.trades}`,
@@ -41,8 +53,9 @@ export default async function Summary({ searchParams }: { searchParams: { day?: 
   ].filter(Boolean).join("\n");
 
   const card: CardData = {
-    file: `matryoshka-svodka-${P}-${S.key}`,
-    caption: day ? "Сводка группы" : P === "all" ? "Сводка за всё время" : P === "week" ? "Сводка за неделю" : "Сводка за месяц",
+    file: `matryoshka-svodka-${isAll ? "" : S.scope.key + "-"}${P}-${S.key}`,
+    caption: (isAll ? "" : S.scope.short + " · ") + (day ? (isAll ? "Сводка группы" : "сводка") : P === "all" ? "за всё время" : P === "week" ? "за неделю" : "за месяц"),
+    heroLabel: isAll ? "Итог группы" : S.scope.key.startsWith("team-") ? "Итог команды" : "Итог выборки",
     date: day ? `${fmtD(S.end)}.${year}` : P === "month" ? S.label.short : `${fmtD(S.start)}–${fmtD(S.end)}.${year}`,
     heroPct: sum.cumPct, heroUsd: sum.cum, capital: S.capital,
     curve: S.chart.map(d => ({ day: fmtD(d.day), v: d.cumPct })),
@@ -63,10 +76,10 @@ export default async function Summary({ searchParams }: { searchParams: { day?: 
     <>
       <div className="head">
         <div>
-          <div className="titlerow"><h1>Сводка группы</h1><span className="count">{S.label.short}</span></div>
+          <div className="titlerow"><h1>{isAll ? "Сводка группы" : `Сводка · ${S.scope.name}`}</h1><span className="count">{S.label.short}</span></div>
           <p className="sub" style={{ textTransform: day ? "capitalize" : undefined }}>{S.label.long}{!day ? ` · торговых дней ${sum.tradingDays}` : ""}</p>
           <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap", alignItems: "center" }}>
-            <nav className="seg2" aria-label="Период">{TABS.map(([p, l]) => <Link key={p} href={href(p)} aria-current={p === P ? "page" : undefined}>{l}</Link>)}</nav>
+            <nav className="seg2" aria-label="Период" style={{ marginRight: 4 }}>{TABS.map(([p, l]) => <Link key={p} href={href(p)} aria-current={p === P ? "page" : undefined}>{l}</Link>)}</nav>
             {P !== "all" && <>
               {S.prev ? <Link className="btn ghost" href={href(P, S.prev)} aria-label="Предыдущий период">‹</Link> : <span className="btn ghost" aria-disabled="true" style={{ opacity: .35 }}>‹</span>}
               {S.next ? <Link className="btn ghost" href={href(P, S.next)} aria-label="Следующий период">›</Link> : <span className="btn ghost" aria-disabled="true" style={{ opacity: .35 }}>›</span>}
@@ -78,6 +91,8 @@ export default async function Summary({ searchParams }: { searchParams: { day?: 
           <CopyReport text={report} />
         </div>
       </div>
+
+      {picker}
 
       <section className="strip" aria-label="Итоги">
         <div><div className="k">Капитал в работе</div><div className="v">{money(S.capital)}</div><div className="fine">{S.count} счетов · баланс {money(S.balance)}</div></div>
@@ -93,6 +108,26 @@ export default async function Summary({ searchParams }: { searchParams: { day?: 
           <div className="w l-green">Лучший день группы: {fmtD(sum.bestDay.day)} · {money(sum.bestDay.pnl, true)} ({sg(sum.bestDay.pct)}%)</div>
           <div className={`w ${sum.worstDay.pnl < 0 ? "l-red" : "l-work"}`}>Худший день группы: {fmtD(sum.worstDay.day)} · {money(sum.worstDay.pnl, true)} ({sg(sum.worstDay.pct)}%)</div>
         </div>)}
+
+      {isAll && S.compare.length > 0 && (
+        <section className="panel">
+          <div className="ph"><h2>Сравнение команд</h2><span className="fine">{FOR[P]} · % от капитала команды · нажмите на команду, чтобы открыть её сводку</span></div>
+          <div className="tablewrap"><table>
+            <thead><tr><th>Команда</th><th>Куратор</th><th className="n">Трейдеров</th><th className="n">Капитал</th><th className="n">{day ? "За день" : "За период"}</th><th className="n">%</th><th className="n">Итог команды</th><th className="n">+ / −</th><th>Зоны</th></tr></thead>
+            <tbody>{S.compare.map((c, i) => (
+              <tr key={c.key} style={{ cursor: "default" }}>
+                <td><Link href={`/admin/summary?period=${P}&day=${S.anchor}&scope=${c.key}`} style={{ color: "var(--fg)", fontWeight: 800, textDecoration: "none" }}>{i === 0 && c.pct > 0 ? "🏆 " : ""}{c.name}</Link></td>
+                <td><span className="fine">{c.curator || "—"}</span></td>
+                <td className="n">{c.count}</td>
+                <td className="n">{money(c.capital)}</td>
+                <td className={`n ${cls(c.pnl)}`}>{money(c.pnl, true)}</td>
+                <td className={`n ${cls(c.pct)}`}><b>{sg(c.pct)}%</b><span className="mini"><i style={{ width: `${Math.min(100, Math.abs(c.pct) / Math.max(0.01, ...S.compare.map(x => Math.abs(x.pct))) * 100)}%`, background: c.pct >= 0 ? "var(--green)" : "var(--red)" }} /></span></td>
+                <td className={`n ${cls(c.cumPct)}`}>{sg(c.cumPct)}%</td>
+                <td className="n"><span className="pos">{c.plus}</span> / <span className="neg">{c.minus}</span></td>
+                <td className="mono"><span className="pos">{c.zones.green}</span> · <span style={{ color: "var(--gold2)" }}>{c.zones.work}</span> · <span style={{ color: "var(--amber)" }}>{c.zones.yellow}</span> · <span className="neg">{c.zones.red}</span></td>
+              </tr>))}</tbody>
+          </table></div>
+        </section>)}
 
       <section className="panel">
         <div className="ph"><h2>Как мы двигаемся вместе</h2><span className="fine">линия — накопленный результат, % от общего капитала · столбцы — итог дня, ${P !== "all" ? " · выбранный период подсвечен" : ""}</span></div>

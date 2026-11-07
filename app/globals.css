@@ -182,3 +182,6 @@ textarea{font:inherit;background:var(--sunk);color:var(--fg);border:1px solid va
 .seg2 a{padding:7px 14px;border-radius:7px;color:var(--muted);text-decoration:none;font-weight:700;font-size:13px}
 .seg2 a:hover{color:var(--fg)}
 .seg2 a[aria-current="page"]{background:linear-gradient(180deg,var(--gold2),var(--gold));color:var(--accent-ink)}
+.chip{font:inherit;font-size:13px;font-weight:700;padding:6px 12px;border-radius:999px;border:1px solid var(--line2);background:var(--surface);color:var(--muted);cursor:pointer}
+.chip:hover{color:var(--fg);border-color:var(--gold-dim)}
+.chip.on{background:rgba(232,181,74,.12);border-color:var(--gold);color:var(--gold2)}

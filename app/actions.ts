@@ -71,3 +71,35 @@ export async function removeTrader(fd: FormData) {
   revalidatePath("/admin");
   redirect("/admin");
 }
+
+// ---------- Команды кураторов ----------
+export async function createTeam(fd: FormData) {
+  const { sb } = await requireAdmin();
+  const name = String(fd.get("name") || "").trim().slice(0, 60);
+  if (!name) redirect("/admin/teams?e=name");
+  await sb.from("teams").insert({ name, curator: String(fd.get("curator") || "").trim().slice(0, 60) || null });
+  revalidatePath("/admin/teams"); redirect("/admin/teams?ok=created");
+}
+
+export async function updateTeam(fd: FormData) {
+  const { sb } = await requireAdmin();
+  const id = Number(fd.get("id")), name = String(fd.get("name") || "").trim().slice(0, 60);
+  if (!id || !name) redirect("/admin/teams?e=name");
+  await sb.from("teams").update({ name, curator: String(fd.get("curator") || "").trim().slice(0, 60) || null }).eq("id", id);
+  revalidatePath("/admin/teams"); redirect("/admin/teams?ok=saved");
+}
+
+export async function deleteTeam(fd: FormData) {
+  const { sb } = await requireAdmin();
+  await sb.from("teams").delete().eq("id", Number(fd.get("id"))); // участники становятся «без команды»
+  revalidatePath("/admin/teams"); redirect("/admin/teams?ok=deleted");
+}
+
+export async function assignTeams(fd: FormData) {
+  const { sb } = await requireAdmin();
+  const groups = new Map<string, string[]>();
+  for (const [k, v] of fd.entries()) if (k.startsWith("t_")) { const t = String(v); if (!groups.has(t)) groups.set(t, []); groups.get(t)!.push(k.slice(2)); }
+  for (const [t, users] of groups) await sb.from("profiles").update({ team_id: t ? Number(t) : null }).in("id", users);
+  revalidatePath("/admin/teams"); revalidatePath("/admin"); revalidatePath("/admin/summary");
+  redirect("/admin/teams?ok=assigned");
+}
