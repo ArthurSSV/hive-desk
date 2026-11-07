@@ -21,7 +21,7 @@ async function run(req: NextRequest) {
   if (!authorized(req)) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   const t0 = Date.now(), lines: string[] = [];
   try {
-    const r = await syncAll(serviceClient(), { budgetMs: 22_000, log: s => lines.push(s) });
+    const r = await syncAll(serviceClient(), { budgetMs: 20_000, concurrency: 4, log: s => lines.push(s) });
     return NextResponse.json({ ...r, ms: Date.now() - t0, log: lines.slice(-50) });
   } catch (e: any) {
     return NextResponse.json({ error: String(e?.message || e), log: lines }, { status: 500 });

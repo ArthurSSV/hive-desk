@@ -146,7 +146,7 @@ async function notify(sb: SupabaseClient, acc: Account, out: Awaited<ReturnType<
 
 /** Синхронизирует все активные счета (или счета одного трейдера). */
 /** budgetMs — лимит времени: счета идут от давно не обновлявшихся, остальные подождут следующего запуска. */
-export async function syncAll(sb: SupabaseClient, opts: { userId?: string; log?: (s: string) => void; budgetMs?: number } = {}) {
+export async function syncAll(sb: SupabaseClient, opts: { userId?: string; log?: (s: string) => void; budgetMs?: number; concurrency?: number } = {}) {
   const log = opts.log || (() => {});
   const t0 = Date.now();
   const rules = await loadRules(sb);
@@ -155,8 +155,8 @@ export async function syncAll(sb: SupabaseClient, opts: { userId?: string; log?:
   const { data: accounts, error } = await q;
   if (error) throw error;
   let ok = 0, failed = 0, skipped = 0;
-  for (const acc of (accounts || []) as Account[]) {
-    if (opts.budgetMs && Date.now() - t0 > opts.budgetMs) { skipped++; continue; }
+  const queue = [...((accounts || []) as Account[])];
+  const one = async (acc: Account) => {
     try {
       let initial = acc.initial_balance;
       if (acc.status === "active" || initial == null) ({ initial } = await pullDeals(sb, acc));
@@ -168,7 +168,15 @@ export async function syncAll(sb: SupabaseClient, opts: { userId?: string; log?:
       failed++; log(`err ${acc.ctid_trader_account_id}: ${e.message}`);
       await sb.from("ctrader_accounts").update({ sync_error: String(e.message).slice(0, 300), last_synced_at: new Date().toISOString() }).eq("id", acc.id);
     }
-  }
+  };
+  // Несколько счетов параллельно: у каждого своё соединение с cTrader и свой лимит запросов
+  const workers = Array.from({ length: Math.max(1, opts.concurrency || 1) }, async () => {
+    for (let acc = queue.shift(); acc; acc = queue.shift()) {
+      if (opts.budgetMs && Date.now() - t0 > opts.budgetMs) { skipped++; continue; }
+      await one(acc);
+    }
+  });
+  await Promise.all(workers);
   if (!opts.budgetMs || Date.now() - t0 < opts.budgetMs) await syncChain(sb, log).catch(e => log("chain: " + e.message));
   return { ok, failed, skipped };
 }
