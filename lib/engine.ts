@@ -19,7 +19,7 @@ export type DayStat = {
   mood: number | null;
   plan: boolean | null;
   checkin: boolean;
-  day_loss_pct: number; // худший убыток за день с учётом плавающего, % от начального
+  day_loss_pct: number; // худший убыток за день с учётом плавающего, % от баланса на начало дня (как у FundedHive)
   dd_pct: number;       // макс. просадка от начального баланса с учётом плавающего, %
   tracked: boolean; // день после подключения к Hive Desk — только для них ждём отчёт
   breach: "daily" | "max" | null;
@@ -104,7 +104,7 @@ export function computeAccount(opts: {
       mood: j?.mood ?? null,
       plan: j?.plan ?? null,
       checkin: !!j,
-      day_loss_pct: r2(Math.max(0, ((dayStart - low) / init) * 100)),
+      day_loss_pct: r2(dayStart > 0 ? Math.max(0, ((dayStart - low) / dayStart) * 100) : 0),
       dd_pct: r2(ddMax),
       tracked: day >= opts.startDay,
       breach: null, level: "green", flags: [],
@@ -150,8 +150,15 @@ export function isProfitDay(startPct: number, endPct: number, threshold: number)
   return endPct - Math.max(startPct, 0) >= threshold - 1e-9;
 }
 
-export function summarize(days: (Pick<DayStat, "traded" | "pnl_pct" | "total_pct" | "trades" | "mood"> & { day_loss_pct?: number | null; dd_pct?: number | null })[], profitDayPct = 0.5) {
+export function summarize(days: (Pick<DayStat, "traded" | "pnl_pct" | "total_pct" | "trades" | "mood"> & { day?: string; pnl?: number | null; end_balance?: number | null; day_loss_pct?: number | null; dd_pct?: number | null })[], profitDayPct = 0.5, opts: { today?: string; initial?: number } = {}) {
   const last = days[days.length - 1];
+  // Дневной лимит — как у FundedHive: % от баланса на начало торгового дня.
+  // Если сегодня ещё нет строки (выходные, день без сделок) — день начался с последнего баланса.
+  const isToday = !!last && (!opts.today || last.day === opts.today);
+  const lastEnd = last?.end_balance != null ? Number(last.end_balance) : null;
+  const dayStart = last && lastEnd != null ? (isToday ? lastEnd - Number(last.pnl || 0) : lastEnd) : opts.initial ?? 0;
+  const todayPnl = isToday && last?.pnl != null ? Number(last.pnl) : 0;
+  const worstRow = days.reduce<(typeof days)[number] | null>((w, d) => (Number(d.day_loss_pct || 0) > Number(w?.day_loss_pct || 0) ? d : w), null);
   const traded = days.filter(d => d.traded);
   const prev = days.slice(-11, -1).filter(d => d.traded);
   return {
@@ -160,10 +167,15 @@ export function summarize(days: (Pick<DayStat, "traded" | "pnl_pct" | "total_pct
     todayTrades: last ? last.trades : 0,
     avgTrades: prev.length ? prev.reduce((a, d) => a + d.trades, 0) / prev.length : 0,
     maxDD: Math.max(-Math.min(0, ...days.map(d => Number(d.total_pct))), ...days.map(d => Number(d.dd_pct || 0))),
-    // Текущий убыток дня: если день уже отбит в плюс — 0, как у пропа
-    todayLoss: last ? Math.max(0, -Number(last.pnl_pct)) : 0,
+    // Текущий убыток дня, % от баланса на начало дня: если день уже отбит в плюс — 0, как у пропа
+    todayLoss: dayStart > 0 ? Math.max(0, (-todayPnl / dayStart) * 100) : 0,
     // Худшая точка дня с учётом плавающего убытка (для справки и риск-флагов)
-    todayWorst: last ? Math.max(Number(last.day_loss_pct || 0), -Number(last.pnl_pct), 0) : 0,
+    todayWorst: isToday && dayStart > 0 ? Math.max(Number(last!.day_loss_pct || 0), (-todayPnl / dayStart) * 100, 0) : 0,
+    todayPnlPct: dayStart > 0 ? (todayPnl / dayStart) * 100 : 0,
+    dayStart,
+    balanceNow: dayStart + todayPnl,
+    worstDayLoss: worstRow ? Number(worstRow.day_loss_pct || 0) : 0,
+    worstDayLossAt: worstRow?.day ?? null,
     curDD: last ? Math.max(0, -Number(last.total_pct)) : 0,
     tradingDays: traded.length,
     profitDays: traded.filter(d => isProfitDay(Number(d.total_pct) - Number(d.pnl_pct), Number(d.total_pct), profitDayPct)).length,
@@ -174,4 +186,20 @@ export function summarize(days: (Pick<DayStat, "traded" | "pnl_pct" | "total_pct
     worst: traded.length ? Math.min(...traded.map(d => Number(d.pnl_pct))) : 0,
     mood: [...days].reverse().find(d => d.mood)?.mood ?? null,
   };
+}
+
+/** Смещение часового пояса tz относительно UTC в момент ms, миллисекунды. */
+function tzOffset(ms: number, tz: string): number {
+  const p = Object.fromEntries(new Intl.DateTimeFormat("en-US", { timeZone: tz, hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" })
+    .formatToParts(new Date(ms)).map(x => [x.type, x.value]));
+  return Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour, +p.minute, +p.second) - Math.floor(ms / 1000) * 1000;
+}
+
+/** Момент начала следующего торгового дня (сброс дневного лимита) в часовом поясе tz. */
+export function nextDayStart(tz: string, now = new Date()): Date {
+  const [y, m, d] = dayKey(now, tz).split("-").map(Number);
+  const guess = Date.UTC(y, m - 1, d + 1);
+  let t = guess - tzOffset(guess, tz);
+  const off2 = tzOffset(t, tz); if (guess - off2 !== t) t = guess - off2;
+  return new Date(t);
 }

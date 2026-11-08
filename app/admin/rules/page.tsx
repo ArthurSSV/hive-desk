@@ -67,7 +67,7 @@ export default async function RulesPage({ searchParams }: { searchParams: { save
             {CHALLENGE.map(field(R))}
             <label htmlFor="r-tz">Часовой пояс торгового дня<input id="r-tz" name="tz" defaultValue={R.tz} placeholder="UTC" /></label>
           </div>
-          <p className="fine" style={{ marginTop: 10 }}>Часовой пояс определяет, когда сбрасывается дневной лимит. Укажите тот же, что у FundedHive, например UTC или Europe/Kiev.</p>
+          <p className="fine" style={{ marginTop: 10 }}>Дневной лимит считается как у FundedHive: от баланса на начало дня, с учётом плавающего убытка. Часовой пояс определяет, когда день начинается и лимит сбрасывается; у FundedHive это UTC (02:00 по Киеву зимой).</p>
         </section>
         <section className="panel"><div className="ph"><h2>Флаги поведения</h2><span className="fine">не меняют зону, показываются причинами</span></div>
           <div className="rules">{FLAGS.map(field(R))}</div>

@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { summarize } from "./engine";
+import { summarize, dayKey } from "./engine";
 import { normalizeRules, zoneOf } from "./rules";
 
 export type Account = {
@@ -48,7 +48,7 @@ export async function traderBundle(sb: SupabaseClient, userId: string) {
     : [{ data: [] as any[] }, { data: [] as any[] }];
   const jmap = new Map((journal || []).map((j: any) => [j.day, j]));
   const merged = (days || []).map((d: any) => ({ ...d, level: zoneOf(d.total_pct, acc!.phase, rules), traded: d.trades > 0 || Number(d.pnl) !== 0, mood: jmap.get(d.day)?.mood ?? null }));
-  return { profile, accounts: (accounts || []) as Account[], acc, days: merged, deals: (deals || []) as any[], journal: journal || [], chain: chain || [], rules, m: summarize(merged, rules.profitDayPct) };
+  return { profile, accounts: (accounts || []) as Account[], acc, days: merged, deals: (deals || []) as any[], journal: journal || [], chain: chain || [], rules, m: summarize(merged, rules.profitDayPct, { today: dayKey(new Date(), rules.tz), initial: Number(acc?.balance || acc?.initial_balance || 0) }) };
 }
 
 export async function groupBundle(sb: SupabaseClient) {

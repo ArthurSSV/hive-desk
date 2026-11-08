@@ -1,11 +1,13 @@
 import Link from "next/link";
-import { dayKey } from "@/lib/engine";
+import { dayKey, nextDayStart } from "@/lib/engine";
 import type { traderBundle } from "@/lib/data";
 import { saveJournal, syncMe } from "@/app/actions";
 import { EquityChart, Gauge, PhaseTag, Pill, cls, fmtD, sg, usd, type Day } from "./ui";
 import DealsHistory from "./DealsHistory";
 
 type B = Awaited<ReturnType<typeof traderBundle>>;
+
+const usd2 = (n: number) => "$" + n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 export default function TraderView({ b, mode }: { b: B; mode: "self" | "admin" }) {
   const { acc, days, m, rules: R, profile, journal, chain } = b;
@@ -23,6 +25,11 @@ export default function TraderView({ b, mode }: { b: B; mode: "self" | "admin" }
   const last: any = days[days.length - 1];
   const level = failed ? "failed" : last?.level || "work";
   const leftDaily = R.daily - m.todayLoss, leftMax = R.max - m.maxDD;
+  // Дневной лимит как у FundedHive: от баланса на начало дня
+  const minBal = m.dayStart * (1 - R.daily / 100), remaining = Math.max(0, m.balanceNow - minBal);
+  const kyiv = (d: Date, o: Intl.DateTimeFormatOptions) => d.toLocaleString("ru-RU", { timeZone: "Europe/Kiev", ...o });
+  const reset = kyiv(nextDayStart(R.tz), { hour: "2-digit", minute: "2-digit" });
+  const worstAt = m.worstDayLossAt ? new Date(m.worstDayLossAt + "T12:00:00Z").toLocaleDateString("ru-RU", { day: "numeric", month: "short", timeZone: "UTC" }) : null;
   const warns: { lv: string; t: string }[] = [];
   if (failed) warns.push({ lv: "failed", t: "Счёт закрыт по нарушению лимита." });
   else if (acc.status === "passed") warns.push({ lv: "green", t: "Цель фазы выполнена. Когда получите новый счёт, подключите его на странице подключения." });
@@ -47,7 +54,10 @@ export default function TraderView({ b, mode }: { b: B; mode: "self" | "admin" }
 
       <div className="gauges">
         <Gauge icon="days" k="Прибыльные дни" v={`${m.profitDays} дн.`} sub={`Цель: ${R.minDays} дн.`} pct={(m.profitDays / R.minDays) * 100} col="var(--gold)" note={<><span className="pos">▲ {m.winDays} в плюс</span> · <span className="neg">▼ {m.lossDays} в минус</span> · из {m.tradingDays} торговых<br />В зачёт — прирост от +{R.profitDayPct}% выше стартового баланса</>} />
-        <Gauge icon="daily" k="Дневной убыток" v={failed ? "—" : `${m.todayLoss.toFixed(2)}%`} sub={`Допуск: ${R.daily}%`} pct={(m.todayLoss / R.daily) * 100} col={m.todayLoss >= R.redDaily ? "var(--red)" : "var(--gold)"} note={failed ? "Счёт закрыт" : <>Итог дня <span className={cls(m.today)}>{sg(m.today)}%</span>{m.todayWorst > 0 ? <> · худшая точка <span className="neg">−{m.todayWorst.toFixed(2)}%</span></> : null}<br />Запас {leftDaily.toFixed(2)}% · {usd((init * leftDaily) / 100)}</>} />
+        <Gauge icon="daily" k="Дневной убыток" v={failed ? "—" : `${m.todayLoss.toFixed(2)}%`} sub={`Допуск: ${R.daily}%`} pct={(m.todayLoss / R.daily) * 100} col={m.todayLoss >= R.redDaily ? "var(--red)" : "var(--gold)"} note={failed ? "Счёт закрыт" : <>
+          Итог дня <span className={cls(m.todayPnlPct)}>{sg(m.todayPnlPct)}%</span>{m.todayWorst > 0 ? <> · худшая точка <span className="neg">−{m.todayWorst.toFixed(2)}%</span></> : null}<br />
+          Мин. баланс <span className="mono">{usd2(minBal)}</span> · осталось <span className="mono">{usd2(remaining)}</span><br />
+          {worstAt ? <>Худший день {m.worstDayLoss.toFixed(2)}% · {worstAt} · </> : null}сброс в {reset} по Киеву</>} />
         <Gauge icon="max" k="Общая просадка" v={`${m.maxDD.toFixed(2)}%`} sub={`Допуск: ${R.max}%`} pct={(m.maxDD / R.max) * 100} col={m.maxDD >= R.redDD ? "var(--red)" : "var(--red)"} note="С учётом плавающего убытка открытых позиций" />
         {target != null
           ? <Gauge icon="target" k="Цель прибыли" v={`${sg(m.total)}%`} sub={`Цель: ${target}%`} pct={(m.total / target) * 100} col="var(--green)" note={m.total >= target ? "Цель достигнута" : `Осталось ${(target - m.total).toFixed(2)}% · ${usd((init * (target - m.total)) / 100)}`} />

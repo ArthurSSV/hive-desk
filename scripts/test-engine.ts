@@ -1,6 +1,6 @@
 // Проверка движка метрик на синтетических сделках: npm test
 import assert from "node:assert/strict";
-import { computeAccount, summarize, isProfitDay } from "../lib/engine";
+import { computeAccount, summarize, isProfitDay, nextDayStart } from "../lib/engine";
 import { DEFAULT_RULES, zoneOf } from "../lib/rules";
 import { buildPositions, minEquityByDay } from "../lib/equity";
 
@@ -59,6 +59,19 @@ assert.equal(me.get("2026-11-04"), 49600);
 r = computeAccount({ phase: 1, initialBalance: 50000, rules: R, startDay: "2026-11-04", today: "2026-11-04", journal: [], minEquity: me,
   deals: xd.map(d => ({ exec_ts: d.exec_ts, is_close: d.is_close, net_profit: d.net_profit, volume: d.volume })) });
 assert.equal(r.days[0].dd_pct, 0.8); assert.equal(r.days[0].day_loss_pct, 0.8); assert.equal(r.days[0].total_pct, 0.4);
+
+// 7b. Дневной лимит от баланса на начало дня (как у FundedHive): $50k, вчера +$773, сегодня −$2 400
+r = computeAccount({ phase: 1, initialBalance: 50000, rules: R, startDay: "2026-11-05", today: "2026-11-06", journal: [],
+  deals: [{ exec_ts: "2026-11-05T10:00:00Z", is_close: true, net_profit: 772.98, volume: 100 }, { exec_ts: "2026-11-06T10:00:00Z", is_close: true, net_profit: -2400, volume: 100 }] });
+assert.equal(r.days[1].day_loss_pct, 4.73); assert.equal(r.days[1].breach, null);
+const s7 = summarize(r.days, 1, { today: "2026-11-06" });
+assert.equal(Math.round(s7.dayStart * 100) / 100, 50772.98); assert.equal(Math.round(s7.todayLoss * 100) / 100, 4.73);
+assert.equal(s7.worstDayLossAt, "2026-11-06");
+// В выходные день начинается с последнего баланса, убыток сегодня — 0
+const s7w = summarize(r.days, 1, { today: "2026-11-08" });
+assert.equal(s7w.todayLoss, 0); assert.equal(Math.round(s7w.dayStart * 100) / 100, 48372.98);
+assert.equal(nextDayStart("UTC", new Date("2026-11-08T17:00:00Z")).toISOString(), "2026-11-09T00:00:00.000Z");
+assert.equal(nextDayStart("Europe/Kiev", new Date("2026-11-08T17:00:00Z")).toISOString(), "2026-11-08T22:00:00.000Z");
 
 // 8. Зоны светофора по результату фазы
 assert.equal(zoneOf(6, 1, R), "green"); assert.equal(zoneOf(5.9, 1, R), "work");
