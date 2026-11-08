@@ -60,6 +60,15 @@ r = computeAccount({ phase: 1, initialBalance: 50000, rules: R, startDay: "2026-
   deals: xd.map(d => ({ exec_ts: d.exec_ts, is_close: d.is_close, net_profit: d.net_profit, volume: d.volume })) });
 assert.equal(r.days[0].dd_pct, 0.8); assert.equal(r.days[0].day_loss_pct, 0.8); assert.equal(r.days[0].total_pct, 0.4);
 
+// 7a. Свеча входа: минимум свечи был до сделки — не учитываем; свеча выхода — по цене выхода
+const yd = [
+  { position_id: 2, symbol_id: 41, side: "buy", volume: 100, exec_ts: "2026-11-04T10:00:40Z", is_close: false, price: 4000, entry_price: null, conv: null, net_profit: 0 },
+  { position_id: 2, symbol_id: 41, side: "sell", volume: 100, exec_ts: "2026-11-04T10:02:20Z", is_close: true, price: 3995, entry_price: 4000, conv: 1, net_profit: -5 },
+];
+const yb = new Map([[2, [[t0, 3990, 4001, 3980, 3999], [t0 + 1, 3999, 4002, 3992, 3996], [t0 + 2, 3996, 3997, 3970, 3975]]]]);
+const ye = minEquityByDay({ initial: 50000, deals: yd, positions: buildPositions(yd), bars: yb, tz: "UTC" });
+assert.equal(ye.get("2026-11-04"), 49992); // только середина: 3992 − 4000 = −8 на 1 унции
+
 // 7b. Дневной лимит от баланса на начало дня (как у FundedHive): $50k, вчера +$773, сегодня −$2 400
 r = computeAccount({ phase: 1, initialBalance: 50000, rules: R, startDay: "2026-11-05", today: "2026-11-06", journal: [],
   deals: [{ exec_ts: "2026-11-05T10:00:00Z", is_close: true, net_profit: 772.98, volume: 100 }, { exec_ts: "2026-11-06T10:00:00Z", is_close: true, net_profit: -2400, volume: 100 }] });

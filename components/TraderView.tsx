@@ -28,6 +28,9 @@ export default function TraderView({ b, mode }: { b: B; mode: "self" | "admin" }
   const leftDaily = R.daily - m.todayLoss, leftMax = R.max - m.maxDD;
   // Дневной лимит как у FundedHive: от баланса на начало дня
   const minBal = m.dayStart * (1 - R.daily / 100), remaining = Math.max(0, m.balanceNow - minBal);
+  const floor = init * (1 - R.max / 100), lowEq = m.lowestEq ?? init;
+  const shortDay = (d: string) => new Date(d + "T12:00:00Z").toLocaleDateString("ru-RU", { day: "numeric", month: "short", timeZone: "UTC" });
+  const lowAt = m.lowestEq != null && m.lowestEq < init ? (m.lowestEqAt ? shortDay(m.lowestEqAt) : null) : acc.created_at ? "старт " + shortDay(String(acc.created_at).slice(0, 10)) : null;
   const vtz = viewerTz(), resetAt = nextDayStart(R.tz);
   const reset = resetAt.toLocaleString("ru-RU", { timeZone: vtz, hour: "2-digit", minute: "2-digit" }) + " " + tzLabel(vtz, resetAt);
   const worstAt = m.worstDayLossAt ? new Date(m.worstDayLossAt + "T12:00:00Z").toLocaleDateString("ru-RU", { day: "numeric", month: "short", timeZone: "UTC" }) : null;
@@ -59,7 +62,10 @@ export default function TraderView({ b, mode }: { b: B; mode: "self" | "admin" }
           Итог дня <span className={cls(m.todayPnlPct)}>{sg(m.todayPnlPct)}%</span>{m.todayWorst > 0 ? <> · худшая точка <span className="neg">−{m.todayWorst.toFixed(2)}%</span></> : null}<br />
           Мин. баланс <span className="mono">{usd2(minBal)}</span> · осталось <span className="mono">{usd2(remaining)}</span><br />
           {worstAt ? <>Худший день {m.worstDayLoss.toFixed(2)}% · {worstAt} · </> : null}сброс в {reset}</>} />
-        <Gauge icon="max" k="Общая просадка" v={`${m.maxDD.toFixed(2)}%`} sub={`Допуск: ${R.max}%`} pct={(m.maxDD / R.max) * 100} col={m.maxDD >= R.redDD ? "var(--red)" : "var(--red)"} note="С учётом плавающего убытка открытых позиций" />
+        <Gauge icon="max" k="Общая просадка" v={`${m.maxDD.toFixed(2)}%`} sub={`Допуск: ${R.max}%`} pct={(m.maxDD / R.max) * 100} col={m.maxDD >= R.redDD ? "var(--red)" : "var(--gold)"} note={<>
+          Мин. эквити <span className="mono">{usd2(lowEq)}</span>{lowAt ? <> · {lowAt}</> : null}<br />
+          Граница <span className="mono">{usd2(floor)}</span> · запас <span className="mono">{usd2(Math.max(0, m.balanceNow - floor))}</span><br />
+          <span title="Считаем по минутным свечам cTrader — может быть на 0.01–0.05% выше, чем у FundedHive">С учётом открытых позиций, не сбрасывается</span></>} />
         {target != null
           ? <Gauge icon="target" k="Цель прибыли" v={`${sg(m.total)}%`} sub={`Цель: ${target}%`} pct={(m.total / target) * 100} col="var(--green)" note={m.total >= target ? "Цель достигнута" : `Осталось ${(target - m.total).toFixed(2)}% · ${usd((init * (target - m.total)) / 100)}`} />
           : <Gauge icon="target" k="Funded-счёт" v={`${sg(m.total)}%`} pct={100} col="var(--green)" note="Прибыль с начала funded" />}

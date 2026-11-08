@@ -150,7 +150,7 @@ export function isProfitDay(startPct: number, endPct: number, threshold: number)
   return endPct - Math.max(startPct, 0) >= threshold - 1e-9;
 }
 
-export function summarize(days: (Pick<DayStat, "traded" | "pnl_pct" | "total_pct" | "trades" | "mood"> & { day?: string; pnl?: number | null; end_balance?: number | null; day_loss_pct?: number | null; dd_pct?: number | null })[], profitDayPct = 0.5, opts: { today?: string; initial?: number } = {}) {
+export function summarize(days: (Pick<DayStat, "traded" | "pnl_pct" | "total_pct" | "trades" | "mood"> & { day?: string; pnl?: number | null; end_balance?: number | null; min_equity?: number | null; day_loss_pct?: number | null; dd_pct?: number | null })[], profitDayPct = 0.5, opts: { today?: string; initial?: number } = {}) {
   const last = days[days.length - 1];
   // Дневной лимит — как у FundedHive: % от баланса на начало торгового дня.
   // Если сегодня ещё нет строки (выходные, день без сделок) — день начался с последнего баланса.
@@ -158,6 +158,13 @@ export function summarize(days: (Pick<DayStat, "traded" | "pnl_pct" | "total_pct
   const lastEnd = last?.end_balance != null ? Number(last.end_balance) : null;
   const dayStart = last && lastEnd != null ? (isToday ? lastEnd - Number(last.pnl || 0) : lastEnd) : opts.initial ?? 0;
   const todayPnl = isToday && last?.pnl != null ? Number(last.pnl) : 0;
+  // Самое низкое эквити за фазу и его день (как «Lowest Equity» у FundedHive)
+  let lowestEq: number | null = null, lowestEqAt: string | null = null;
+  for (const d of days) {
+    if (d.end_balance == null) continue;
+    const end = Number(d.end_balance), low = Math.min(end, end - Number(d.pnl || 0), d.min_equity != null ? Number(d.min_equity) : Infinity);
+    if (lowestEq == null || low < lowestEq - 1e-9) { lowestEq = low; lowestEqAt = d.day ?? null; }
+  }
   const worstRow = days.reduce<(typeof days)[number] | null>((w, d) => (Number(d.day_loss_pct || 0) > Number(w?.day_loss_pct || 0) ? d : w), null);
   const traded = days.filter(d => d.traded);
   const prev = days.slice(-11, -1).filter(d => d.traded);
@@ -176,6 +183,8 @@ export function summarize(days: (Pick<DayStat, "traded" | "pnl_pct" | "total_pct
     balanceNow: dayStart + todayPnl,
     worstDayLoss: worstRow ? Number(worstRow.day_loss_pct || 0) : 0,
     worstDayLossAt: worstRow?.day ?? null,
+    lowestEq,
+    lowestEqAt,
     curDD: last ? Math.max(0, -Number(last.total_pct)) : 0,
     tradingDays: traded.length,
     profitDays: traded.filter(d => isProfitDay(Number(d.total_pct) - Number(d.pnl_pct), Number(d.total_pct), profitDayPct)).length,

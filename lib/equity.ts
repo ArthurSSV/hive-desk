@@ -8,6 +8,7 @@ export type RawDeal = {
 
 export type Position = {
   id: number; symbolId: number; dir: 1 | -1; entry: number; conv: number;
+  exit: number | null; // цена последнего закрытия
   openMs: number; closeMs: number | null; // null — позиция ещё открыта
   changes: { ms: number; dVol: number }[]; // изменение объёма (в сотых единицы)
 };
@@ -27,6 +28,7 @@ export function buildPositions(deals: RawDeal[]): Position[] {
     const conv = Number(closes.find(c => c.conv)?.conv ?? 1) || 1;
     out.push({
       id, symbolId: Number(o.symbol_id), dir: o.side === "sell" ? -1 : 1, entry, conv,
+      exit: closes.length ? Number(closes[closes.length - 1].price ?? NaN) || null : null,
       openMs: Date.parse(o.exec_ts),
       closeMs: closes.length && closedVol >= openVol ? Date.parse(closes[closes.length - 1].exec_ts) : null,
       changes: list.map(d => ({ ms: Date.parse(d.exec_ts), dVol: (d.is_close ? -1 : 1) * Number(d.volume || 0) })),
@@ -59,12 +61,22 @@ export function minEquityByDay(opts: { initial: number; deals: RawDeal[]; positi
   for (const p of positions) {
     const bs = bars.get(p.id); if (!bs) continue;
     const end = p.closeMs ?? Date.now();
-    for (const [minute, , high, low] of bs) {
+    // Длина свечи: M1 по умолчанию, для длинных сделок — M5/M15/H1
+    let len = Infinity;
+    for (let k = 1; k < bs.length; k++) { const d = (bs[k][0] - bs[k - 1][0]) * 60_000; if (d > 0 && d < len) len = d; }
+    if (!Number.isFinite(len)) len = 60_000;
+    for (const [minute, open, high, low, close] of bs) {
       const t0 = minute * 60_000;
-      if (t0 + 60_000 <= p.openMs || t0 >= end) continue;
+      if (t0 + len <= p.openMs || t0 >= end) continue;
       const vol = p.changes.filter(c => c.ms <= Math.max(t0, p.openMs)).reduce((a, c) => a + c.dVol, 0);
       if (vol <= 0) continue;
-      const worst = p.dir === 1 ? low : high;
+      // Внутри свечи не знаем порядок цен. В свече входа экстремум мог быть ещё до сделки,
+      // в свече выхода — уже после неё. Там берём только известные цены: вход, выход, открытие/закрытие свечи.
+      const hasOpen = p.openMs > t0, hasClose = p.closeMs != null && p.closeMs < t0 + len;
+      const known: number[] = [];
+      if (hasOpen) known.push(p.entry); else known.push(open);
+      if (hasClose && p.exit != null) known.push(p.exit); else known.push(close);
+      const worst = hasOpen || hasClose ? (p.dir === 1 ? Math.min(...known) : Math.max(...known)) : p.dir === 1 ? low : high;
       const pnl = p.dir * (worst - p.entry) * (vol / 100) * p.conv;
       float.set(minute, (float.get(minute) || 0) + pnl);
     }
