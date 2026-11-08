@@ -51,6 +51,14 @@ export default function NotificationBell() {
     if (!n.read_at) { setUnread(u => Math.max(0, u - 1)); setItems(l => l.map(x => (x.id === n.id ? { ...x, read_at: new Date().toISOString() } : x))); fetch("/api/notifications", { method: "POST", body: JSON.stringify({ ids: [n.id] }) }).catch(() => {}); }
     if (n.link) router.push(n.link);
   }
+  async function dismiss(n: N) {
+    setItems(l => l.filter(x => x.id !== n.id)); if (!n.read_at) setUnread(u => Math.max(0, u - 1));
+    fetch("/api/notifications", { method: "DELETE", body: JSON.stringify({ ids: [n.id] }) }).catch(() => {});
+  }
+  async function clearRead() {
+    setItems(l => l.filter(x => !x.read_at));
+    await fetch("/api/notifications", { method: "DELETE", body: JSON.stringify({ read: true }) }).catch(() => {});
+  }
   async function readAll() {
     setUnread(0); setItems(l => l.map(x => ({ ...x, read_at: x.read_at || new Date().toISOString() })));
     await fetch("/api/notifications", { method: "POST", body: JSON.stringify({ all: true }) }).catch(() => {});
@@ -67,15 +75,21 @@ export default function NotificationBell() {
           <div className="notif-pop" role="dialog" aria-label="Уведомления">
             <div className="ph" style={{ margin: 0, padding: "12px 14px", borderBottom: "1px solid var(--line)" }}>
               <h2 style={{ fontSize: 15 }}>Уведомления</h2>
-              {unread > 0 && <button type="button" className="signout" style={{ margin: 0, padding: "3px 8px" }} onClick={readAll}>Прочитать все</button>}
+              <span style={{ display: "flex", gap: 6 }}>
+                {unread > 0 && <button type="button" className="signout" style={{ margin: 0, padding: "3px 8px" }} onClick={readAll}>Прочитать все</button>}
+                {items.some(x => x.read_at) && <button type="button" className="signout" style={{ margin: 0, padding: "3px 8px" }} onClick={clearRead}>Очистить прочитанные</button>}
+              </span>
             </div>
             <div style={{ maxHeight: 420, overflowY: "auto" }}>
               {items.map(n => (
-                <button key={n.id} type="button" className={`notif${n.read_at ? "" : " new"}`} onClick={() => go(n)}>
-                  <span className="ni" style={{ borderColor: TONE[n.kind] || "var(--gold)" }}>{ICON[n.kind] || "•"}</span>
-                  <span style={{ minWidth: 0 }}><span className="nt">{n.text}</span><span className="fine">{ago(n.created_at)}</span></span>
-                </button>))}
-              {!items.length && <p className="fine" style={{ padding: 14, margin: 0 }}>Событий пока нет. Здесь появятся регистрации, подключения счетов и запросы на удаление.</p>}
+                <div key={n.id} className={`notif-row${n.read_at ? "" : " new"}`}>
+                  <button type="button" className="notif" onClick={() => go(n)}>
+                    <span className="ni" style={{ borderColor: TONE[n.kind] || "var(--gold)" }}>{ICON[n.kind] || "•"}</span>
+                    <span style={{ minWidth: 0 }}><span className="nt">{n.text}</span><span className="fine">{ago(n.created_at)}</span></span>
+                  </button>
+                  <button type="button" className="toast-x" aria-label="Убрать уведомление" title="Убрать" onClick={() => dismiss(n)}>×</button>
+                </div>))}
+              {!items.length && <p className="fine" style={{ padding: 14, margin: 0 }}>Новых событий нет. Здесь появятся регистрации, подключения счетов и запросы на удаление.</p>}
             </div>
           </div>)}
       </div>
