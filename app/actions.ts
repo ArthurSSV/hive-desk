@@ -27,9 +27,10 @@ export async function activateAccount(fd: FormData) {
   const id = Number(fd.get("id"));
   const phase = Number(fd.get("phase"));
   const initial = fd.get("initial") ? Number(fd.get("initial")) : null;
-  if (![1, 2, 3].includes(phase) || (initial != null && !(initial >= 100 && initial <= 10_000_000))) redirect("/connect?error=" + encodeURIComponent("Проверьте этап и начальный баланс"));
-  const { data: acc } = await sb.from("ctrader_accounts").select("id,balance_locked").eq("id", id).eq("user_id", profile.id).single();
-  if (!acc) redirect("/connect");
+  const { data: acc } = await sb.from("ctrader_accounts").select("id,balance_locked,removed").eq("id", id).eq("user_id", profile.id).single();
+  if (!acc || acc.removed) redirect("/connect");
+  // У подтверждённого счёта поля этапа и баланса заблокированы и в форме не приходят
+  if (!acc.balance_locked && (![1, 2, 3].includes(phase) || (initial != null && !(initial >= 100 && initial <= 10_000_000)))) redirect("/connect?error=" + encodeURIComponent("Проверьте этап и начальный баланс"));
   // Одновременно отслеживается один счёт — остальные выключаем
   await sb.from("ctrader_accounts").update({ active: false }).eq("user_id", profile.id).neq("id", id);
   // Подтверждённые админом этап и баланс трейдер не меняет (это же проверяет база)
@@ -130,4 +131,30 @@ export async function saveInvite(fd: FormData) {
   await sb.from("settings").update({ invite_code: code.slice(0, 40) || null }).eq("id", 1);
   revalidatePath("/admin/rules"); revalidatePath("/admin");
   redirect("/admin/rules?saved=invite");
+}
+
+// ---------- Удаление счёта: трейдер просит, админ подтверждает ----------
+export async function requestRemoval(fd: FormData) {
+  const { sb, profile } = await requireUser();
+  const cancel = fd.get("cancel") === "1";
+  await sb.from("ctrader_accounts").update({ delete_requested_at: cancel ? null : new Date().toISOString() }).eq("id", Number(fd.get("id"))).eq("user_id", profile.id);
+  revalidatePath("/connect");
+  redirect(`/connect?ok=${cancel ? "cancel" : "requested"}`);
+}
+
+export async function adminAccountAction(fd: FormData) {
+  await requireAdmin();
+  const sb = serviceClient();
+  const id = Number(fd.get("id")), user = String(fd.get("user")), act = String(fd.get("act"));
+  if (act === "remove") {
+    // Удаляем историю счёта, саму запись оставляем помеченной, чтобы счёт не вернулся при новом подключении cTrader
+    for (const t of ["deals", "daily_stats", "position_bars", "alerts_sent"]) await sb.from(t).delete().eq("account_id", id);
+    await sb.from("ctrader_accounts").update({ removed: true, active: false, delete_requested_at: null, balance_locked: false, initial_balance: null, status: "active", status_day: null }).eq("id", id);
+  } else if (act === "reject") {
+    await sb.from("ctrader_accounts").update({ delete_requested_at: null }).eq("id", id);
+  } else if (act === "restore") {
+    await sb.from("ctrader_accounts").update({ removed: false }).eq("id", id);
+  }
+  revalidatePath(`/admin/trader/${user}`); revalidatePath("/admin");
+  redirect(`/admin/trader/${user}?ok=${act}`);
 }

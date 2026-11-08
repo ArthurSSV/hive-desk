@@ -36,8 +36,8 @@ export async function GET(req: NextRequest) {
     if (!list.length) return fail("Под этим cTrader ID нет доступных счетов");
 
     for (const a of list) {
-      const { data: existing } = await sb.from("ctrader_accounts").select("id,user_id").eq("ctid_trader_account_id", a.ctidTraderAccountId).maybeSingle();
-      if (existing && existing.user_id !== user.id) continue; // счёт уже привязан к другому трейдеру
+      const { data: existing } = await sb.from("ctrader_accounts").select("id,user_id,removed").eq("ctid_trader_account_id", a.ctidTraderAccountId).maybeSingle();
+      if (existing && (existing.user_id !== user.id || existing.removed)) continue; // чужой счёт или удалён админом
       if (existing) await sb.from("ctrader_accounts").update({ trader_login: a.traderLogin ?? null, broker_name: a.brokerTitleShort ?? null, is_live: !!a.isLive }).eq("id", existing.id);
       else await sb.from("ctrader_accounts").insert({
         user_id: user.id, ctid_trader_account_id: a.ctidTraderAccountId, trader_login: a.traderLogin ?? null,

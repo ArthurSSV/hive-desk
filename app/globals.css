@@ -185,3 +185,4 @@ textarea{font:inherit;background:var(--sunk);color:var(--fg);border:1px solid va
 .chip{font:inherit;font-size:13px;font-weight:700;padding:6px 12px;border-radius:999px;border:1px solid var(--line2);background:var(--surface);color:var(--muted);cursor:pointer}
 .chip:hover{color:var(--fg);border-color:var(--gold-dim)}
 .chip.on{background:rgba(232,181,74,.12);border-color:var(--gold);color:var(--gold2)}
+.field input:disabled,.field select:disabled{opacity:.5;cursor:not-allowed}

@@ -4,7 +4,10 @@ import { requireAdmin } from "@/lib/supabase";
 import { traderBundle } from "@/lib/data";
 import TraderView from "@/components/TraderView";
 import ConfirmRemove from "@/components/ConfirmRemove";
-import { confirmAccount, syncUser } from "@/app/actions";
+import { adminAccountAction, confirmAccount, syncUser } from "@/app/actions";
+import ConfirmButton from "@/components/ConfirmButton";
+import { PHASE_LABEL } from "@/lib/rules";
+import { usd } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
 
@@ -29,6 +32,29 @@ export default async function TraderCard({ params, searchParams }: { params: { i
             {b.acc.balance_locked && <button className="btn ghost" type="submit" name="lock" value="0">Разрешить трейдеру менять</button>}
           </form>
           <p className="fine" style={{ marginTop: 10 }}>Сверьте с Account Size в кабинете FundedHive. После подтверждения трейдер не может изменить этап и баланс.</p>
+        </section>)}
+      {["remove", "reject", "restore"].includes(searchParams.ok || "") && <div className="w l-green notice">{searchParams.ok === "remove" ? "Счёт удалён вместе с историей." : searchParams.ok === "reject" ? "Запрос на удаление отклонён." : "Счёт восстановлен. Трейдер может снова выбрать его для отслеживания."}</div>}
+      {b.accounts.length > 0 && (
+        <section className="panel">
+          <div className="ph"><h2>Счета трейдера</h2><span className="fine">{b.accounts.filter(a => !a.removed).length} подключено</span></div>
+          <div style={{ display: "grid", gap: 10 }}>{b.accounts.map(a => (
+            <div className="acc" key={a.id} style={{ opacity: a.removed ? 0.6 : 1 }}>
+              <div style={{ minWidth: 0 }}>
+                <b>#{a.trader_login || a.ctid_trader_account_id}</b> <span className="fine">{a.broker_name || ""} · {a.is_live ? "live" : "demo"}{a.balance != null ? ` · баланс ${usd(a.balance)}` : ""}</span>
+                <div className="fine">{a.removed ? "Удалён" : a.active ? <span className="ok">Отслеживается · {PHASE_LABEL[a.phase]}</span> : "Не отслеживается"}</div>
+                {a.delete_requested_at && !a.removed && <div className="fine" style={{ color: "var(--amber)" }}>⚠ Трейдер просит удалить счёт · {new Date(a.delete_requested_at).toLocaleString("ru-RU", { timeZone: "Europe/Kiev", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</div>}
+              </div>
+              <form action={adminAccountAction} style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                <input type="hidden" name="id" value={a.id} /><input type="hidden" name="user" value={params.id} />
+                {a.removed
+                  ? <button className="btn ghost" type="submit" name="act" value="restore">Восстановить</button>
+                  : <>
+                      <ConfirmButton name="act" value="remove" label={a.delete_requested_at ? "Подтвердить удаление" : "Удалить"} question="Удалить счёт и всю его историю сделок?" />
+                      {a.delete_requested_at && <button className="btn ghost" type="submit" name="act" value="reject">Отклонить</button>}
+                    </>}
+              </form>
+            </div>))}</div>
+          <p className="fine" style={{ marginTop: 10 }}>Удалённый счёт не вернётся при новом подключении cTrader. «Восстановить» снова разрешает трейдеру выбрать его.</p>
         </section>)}
       <TraderView b={b} mode="admin" />
       <section className="panel"><div className="ph"><h2>Участие в группе</h2></div><ConfirmRemove id={params.id} name={b.profile.name} /></section>

@@ -16,8 +16,10 @@ export default async function Admin() {
   const site = `https://${headers().get("host")}`;
   const { data: st } = await sb.from("settings").select("invite_code").eq("id", 1).single();
   const invite = (st as any)?.invite_code as string | null;
+  const { data: reqs } = await sb.from("ctrader_accounts").select("user_id,trader_login,ctid_trader_account_id").not("delete_requested_at", "is", null).eq("removed", false);
   const regLink = `${site}/register${invite ? `?code=${encodeURIComponent(invite)}` : ""}`;
   const { traders: T, teams, temp, rules: R } = await groupBundle(sb);
+  const nameOf = new Map(T.map(t => [t.p.id, t.p.name]));
   const teamName = new Map(teams.map(t => [t.id, t.name]));
   const withAcc = T.filter(t => t.acc);
   const c = (f: (t: (typeof T)[number]) => boolean) => T.filter(f).length;
@@ -52,6 +54,7 @@ export default async function Admin() {
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
         <CopyReport text={regLink} label="Скопировать ссылку для регистрации" ghost />
         {!invite && <span className="fine" style={{ color: "var(--amber)" }}>Код приглашения не задан — зарегистрироваться может любой. Задайте его в «Правилах».</span>}
+        {(reqs || []).map(r => <Link key={r.ctid_trader_account_id} href={`/admin/trader/${r.user_id}`} className="fine" style={{ color: "var(--red)" }}>⚠ {nameOf.get(r.user_id) || "Трейдер"} просит удалить счёт #{r.trader_login || r.ctid_trader_account_id}</Link>)}
         {T.some(t => t.acc && !t.acc.balance_locked) && <span className="fine" style={{ color: "var(--amber)" }}>⚠ Ждут подтверждения баланса: {T.filter(t => t.acc && !t.acc.balance_locked).map(t => t.p.name).join(", ")}</span>}
       </div>
       <section className="strip" aria-label="Сводка">
