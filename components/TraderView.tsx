@@ -46,7 +46,7 @@ export default function TraderView({ b, mode }: { b: B; mode: "self" | "admin" }
       {warns.length > 0 && <div className="warn">{warns.map((w, i) => <div key={i} className={`w l-${w.lv}`}>{w.t}</div>)}</div>}
 
       <div className="gauges">
-        <Gauge icon="days" k="Прибыльные дни" v={`${m.profitDays} дн.`} sub={`Цель: ${R.minDays} дн.`} pct={(m.profitDays / R.minDays) * 100} col="var(--gold)" note={<><span className="pos">▲ {m.winDays} в плюс</span> · <span className="neg">▼ {m.lossDays} в минус</span> · из {m.tradingDays} торговых<br />В зачёт идут дни от +{R.profitDayPct}%</>} />
+        <Gauge icon="days" k="Прибыльные дни" v={`${m.profitDays} дн.`} sub={`Цель: ${R.minDays} дн.`} pct={(m.profitDays / R.minDays) * 100} col="var(--gold)" note={<><span className="pos">▲ {m.winDays} в плюс</span> · <span className="neg">▼ {m.lossDays} в минус</span> · из {m.tradingDays} торговых<br />В зачёт — прирост от +{R.profitDayPct}% выше стартового баланса</>} />
         <Gauge icon="daily" k="Дневной убыток" v={failed ? "—" : `${m.todayLoss.toFixed(2)}%`} sub={`Допуск: ${R.daily}%`} pct={(m.todayLoss / R.daily) * 100} col={m.todayLoss >= R.redDaily ? "var(--red)" : "var(--gold)"} note={failed ? "Счёт закрыт" : <>Итог дня <span className={cls(m.today)}>{sg(m.today)}%</span>{m.todayWorst > 0 ? <> · худшая точка <span className="neg">−{m.todayWorst.toFixed(2)}%</span></> : null}<br />Запас {leftDaily.toFixed(2)}% · {usd((init * leftDaily) / 100)}</>} />
         <Gauge icon="max" k="Общая просадка" v={`${m.maxDD.toFixed(2)}%`} sub={`Допуск: ${R.max}%`} pct={(m.maxDD / R.max) * 100} col={m.maxDD >= R.redDD ? "var(--red)" : "var(--red)"} note="С учётом плавающего убытка открытых позиций" />
         {target != null

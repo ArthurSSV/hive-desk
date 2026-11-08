@@ -1,6 +1,6 @@
 // Проверка движка метрик на синтетических сделках: npm test
 import assert from "node:assert/strict";
-import { computeAccount, summarize } from "../lib/engine";
+import { computeAccount, summarize, isProfitDay } from "../lib/engine";
 import { DEFAULT_RULES, zoneOf } from "../lib/rules";
 import { buildPositions, minEquityByDay } from "../lib/equity";
 
@@ -64,5 +64,12 @@ assert.equal(r.days[0].dd_pct, 0.8); assert.equal(r.days[0].day_loss_pct, 0.8); 
 assert.equal(zoneOf(6, 1, R), "green"); assert.equal(zoneOf(5.9, 1, R), "work");
 assert.equal(zoneOf(4, 2, R), "green"); assert.equal(zoneOf(-2, 1, R), "yellow");
 assert.equal(zoneOf(-4.99, 2, R), "yellow"); assert.equal(zoneOf(-5, 1, R), "red");
+
+// 9. Прибыльный день считается только над стартовым балансом
+assert.equal(isProfitDay(0, 1, 1), true);       // с нуля +1%
+assert.equal(isProfitDay(2, 3, 1), true);       // в плюсе ещё +1%
+assert.equal(isProfitDay(-0.5, 0.5, 1), false); // отыграл минус, над стартом только +0.5%
+assert.equal(isProfitDay(-0.5, 1.2, 1), true);  // над стартом +1.2%
+assert.equal(isProfitDay(-3, -1.5, 1), false);  // весь день ниже старта
 
 console.log("engine: все проверки пройдены");

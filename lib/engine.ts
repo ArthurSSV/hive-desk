@@ -111,7 +111,7 @@ export function computeAccount(opts: {
     };
     if (s.day_loss_pct >= R.daily) s.breach = "daily";
     else if (s.dd_pct >= R.max) s.breach = "max";
-    if (s.pnl_pct >= R.profitDayPct) profitDays++;
+    if (isProfitDay(s.total_pct - s.pnl_pct, s.total_pct, R.profitDayPct)) profitDays++;
     days.push(s);
     const f = flagsAt(days, days.length - 1, R);
     s.flags = f.flags; s.level = zoneOf(s.total_pct, phase, R);
@@ -144,6 +144,12 @@ export function flagsAt(days: DayStat[], j: number, R: Rules): { level: Level; f
 }
 
 /** Сводные показатели для экранов. */
+/** Прибыльный день: прирост выше стартового баланса фазы не меньше порога.
+ *  Отыгрыш минуса не засчитывается: с −0.5% до +0.5% — это только +0.5% над стартом. */
+export function isProfitDay(startPct: number, endPct: number, threshold: number) {
+  return endPct - Math.max(startPct, 0) >= threshold - 1e-9;
+}
+
 export function summarize(days: (Pick<DayStat, "traded" | "pnl_pct" | "total_pct" | "trades" | "mood"> & { day_loss_pct?: number | null; dd_pct?: number | null })[], profitDayPct = 0.5) {
   const last = days[days.length - 1];
   const traded = days.filter(d => d.traded);
@@ -160,7 +166,7 @@ export function summarize(days: (Pick<DayStat, "traded" | "pnl_pct" | "total_pct
     todayWorst: last ? Math.max(Number(last.day_loss_pct || 0), -Number(last.pnl_pct), 0) : 0,
     curDD: last ? Math.max(0, -Number(last.total_pct)) : 0,
     tradingDays: traded.length,
-    profitDays: traded.filter(d => Number(d.pnl_pct) >= profitDayPct).length,
+    profitDays: traded.filter(d => isProfitDay(Number(d.total_pct) - Number(d.pnl_pct), Number(d.total_pct), profitDayPct)).length,
     winDays: traded.filter(d => Number(d.pnl_pct) > 0).length,
     lossDays: traded.filter(d => Number(d.pnl_pct) < 0).length,
     winRate: traded.length ? Math.round((traded.filter(d => Number(d.pnl_pct) > 0).length / traded.length) * 100) : 0,
