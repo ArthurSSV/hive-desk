@@ -147,13 +147,10 @@ export async function adminAccountAction(fd: FormData) {
   const sb = serviceClient();
   const id = Number(fd.get("id")), user = String(fd.get("user")), act = String(fd.get("act"));
   if (act === "remove") {
-    // Удаляем историю счёта, саму запись оставляем помеченной, чтобы счёт не вернулся при новом подключении cTrader
-    for (const t of ["deals", "daily_stats", "position_bars", "alerts_sent"]) await sb.from(t).delete().eq("account_id", id);
-    await sb.from("ctrader_accounts").update({ removed: true, active: false, delete_requested_at: null, balance_locked: false, initial_balance: null, status: "active", status_day: null }).eq("id", id);
+    // Счёт удаляется целиком вместе с историей; при новом подключении cTrader он появится снова как новый
+    await sb.from("ctrader_accounts").delete().eq("id", id);
   } else if (act === "reject") {
     await sb.from("ctrader_accounts").update({ delete_requested_at: null }).eq("id", id);
-  } else if (act === "restore") {
-    await sb.from("ctrader_accounts").update({ removed: false }).eq("id", id);
   }
   revalidatePath(`/admin/trader/${user}`); revalidatePath("/admin");
   redirect(`/admin/trader/${user}?ok=${act}`);
