@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 
 export default async function Dashboard() {
   const { sb, profile } = await requireUser();
-  if (profile.role === "admin") redirect("/admin");
+  if (profile.role === "admin" && !profile.is_trader) redirect("/admin");
   const b = await traderBundle(sb, profile.id);
   return <TraderView b={b} mode="self" />;
 }

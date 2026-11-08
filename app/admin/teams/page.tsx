@@ -10,7 +10,7 @@ export default async function Teams({ searchParams }: { searchParams: { ok?: str
   const { sb } = await requireAdmin();
   const [{ data: teams, error }, { data: people }] = await Promise.all([
     sb.from("teams").select("id,name,curator").order("name"),
-    sb.from("profiles").select("id,name,email,team_id").eq("role", "trader").order("name"),
+    sb.from("profiles").select("id,name,email,team_id,role").or("role.eq.trader,is_trader.eq.true").order("name"),
   ]);
   if (error) return (
     <div className="head"><div><h1>Команды</h1><p className="sub">Таблица команд ещё не создана. Выполните миграцию <span className="mono">supabase/migrations/004_teams.sql</span> в Supabase → SQL Editor и обновите страницу.</p></div></div>

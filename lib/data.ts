@@ -54,7 +54,7 @@ export async function traderBundle(sb: SupabaseClient, userId: string) {
 export async function groupBundle(sb: SupabaseClient) {
   const since = new Date(Date.now() - 45 * 86400_000).toISOString().slice(0, 10);
   const [{ data: profiles }, { data: accounts }, { data: days }, { data: journal }, rules] = await Promise.all([
-    sb.from("profiles").select("*").eq("role", "trader").order("created_at"),
+    sb.from("profiles").select("*").or("role.eq.trader,is_trader.eq.true").order("created_at"),
     sb.from("ctrader_accounts").select("*"),
     fetchAll(() => sb.from("daily_stats").select("account_id,user_id,day,pnl,pnl_pct,total_pct,trades,level,flags,breach").gte("day", since).order("day").order("account_id")).then(data => ({ data })),
     sb.from("journal").select("user_id,day,mood").gte("day", since),
@@ -105,7 +105,7 @@ type Member = { p: any; acc: Account };
 export async function summaryBundle(sb: SupabaseClient, opts: { day?: string; period?: string; scope?: string; pick?: string[] } = {}) {
   const period: Period = (["day", "week", "month", "all"] as const).includes(opts.period as Period) ? (opts.period as Period) : "day";
   const [{ data: profiles }, { data: accounts }, { data: teamRows }, rules] = await Promise.all([
-    sb.from("profiles").select("*").eq("role", "trader").order("created_at"),
+    sb.from("profiles").select("*").or("role.eq.trader,is_trader.eq.true").order("created_at"),
     sb.from("ctrader_accounts").select("*"),
     sb.from("teams").select("id,name,curator").order("name"),
     rulesOf(sb),

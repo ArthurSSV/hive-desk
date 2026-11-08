@@ -10,7 +10,7 @@ export const metadata: Metadata = { title: "Матрёшка — Челленд�
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const sb = userClient();
   const { data: { user } } = await sb.auth.getUser();
-  const { data: profile } = user ? await sb.from("profiles").select("role,name").eq("id", user.id).single() : { data: null };
+  const { data: profile } = user ? await sb.from("profiles").select("role,name,is_trader").eq("id", user.id).single() : { data: null };
   const admin = profile?.role === "admin";
   return (
     <html lang="ru">
@@ -30,7 +30,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               {admin && <Link href="/admin/summary">Сводка</Link>}
               {admin && <Link href="/admin/teams">Команды</Link>}
               {admin && <Link href="/admin/rules">Правила</Link>}
-              {!admin && <Link href="/dashboard">Мой кабинет</Link>}
+              {(!admin || profile?.is_trader) && <Link href="/dashboard">Мой кабинет</Link>}
               {admin && <NotificationBell />}
               <form action={signOut}><button className="signout" type="submit">Выйти</button></form>
             </nav>

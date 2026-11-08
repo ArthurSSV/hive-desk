@@ -1,6 +1,6 @@
 import { requireAdmin } from "@/lib/supabase";
 import { rulesOf } from "@/lib/data";
-import { saveInvite, saveRules } from "@/app/actions";
+import { saveInvite, saveRules, setSelfTrader } from "@/app/actions";
 
 export const dynamic = "force-dynamic";
 
@@ -18,13 +18,22 @@ const FLAGS: F[] = [["redDaily", "Флаг: убыток за день от, %",
 const field = (R: any) => ([k, l, step, min]: F) => <label key={k} htmlFor={`r-${k}`}>{l}<input id={`r-${k}`} name={k} type="number" step={step} min={min} defaultValue={R[k]} /></label>;
 
 export default async function RulesPage({ searchParams }: { searchParams: { saved?: string } }) {
-  const { sb } = await requireAdmin();
+  const { sb, profile } = await requireAdmin();
   const R: any = await rulesOf(sb);
   const { data: st } = await sb.from("settings").select("invite_code").eq("id", 1).single();
   const invite = ((st as any)?.invite_code as string | null) || "";
   return (
     <>
       <div className="head"><div><h1>Правила и пороги</h1><p className="sub">Зоны светофора применяются сразу после сохранения. Параметры челленджа пересчитаются при следующей синхронизации (до 15 минут).</p></div></div>
+      <section className="panel">
+        <div className="ph"><h2>Я тоже трейдер</h2>{profile.is_trader ? <span className="pill l-green"><span className="dot" />Включено</span> : <span className="pill l-none"><span className="dot" />Выключено</span>}</div>
+        <form action={setSelfTrader} style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+          <input type="hidden" name="on" value={profile.is_trader ? "0" : "1"} />
+          <button className={profile.is_trader ? "btn ghost" : "btn"} type="submit">{profile.is_trader ? "Выключить" : "Включить и подключить счёт"}</button>
+          <span className="fine">В меню появится «Мой кабинет»: подключение cTrader, прогресс, сделки и дневник — как у трейдеров. Ваш счёт попадёт в «Группу», «Сводку» и команды с меткой «админ». Баланс своего счёта подтверждаете в своей карточке на странице «Группа».</span>
+        </form>
+        {searchParams.saved === "self" && <p className="saved" style={{ marginTop: 6 }}>Режим трейдера выключен</p>}
+      </section>
       <section className="panel">
         <div className="ph"><h2>Регистрация</h2>{invite ? <span className="pill l-green"><span className="dot" />По коду</span> : <span className="pill l-yellow"><span className="dot" />Открыта всем</span>}</div>
         <form action={saveInvite} style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "end" }}>
@@ -68,7 +77,7 @@ export default async function RulesPage({ searchParams }: { searchParams: { save
           </div>
           <p className="fine" style={{ marginTop: 10 }}>Трейдеры со срочными флагами попадают в «Требуют внимания» даже в зелёной зоне.</p>
         </section>
-        <div style={{ display: "flex", gap: 12, alignItems: "center" }}><button className="btn" type="submit">Сохранить</button>{searchParams.saved && searchParams.saved !== "invite" && <span className="saved">Сохранено</span>}</div>
+        <div style={{ display: "flex", gap: 12, alignItems: "center" }}><button className="btn" type="submit">Сохранить</button>{searchParams.saved && !["invite", "self"].includes(searchParams.saved) && <span className="saved">Сохранено</span>}</div>
       </form>
     </>
   );

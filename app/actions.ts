@@ -155,3 +155,12 @@ export async function adminAccountAction(fd: FormData) {
   revalidatePath(`/admin/trader/${user}`); revalidatePath("/admin");
   redirect(`/admin/trader/${user}?ok=${act}`);
 }
+
+// ---------- Админ, который тоже торгует ----------
+export async function setSelfTrader(fd: FormData) {
+  const { sb, profile } = await requireAdmin();
+  const on = fd.get("on") === "1";
+  await sb.from("profiles").update({ is_trader: on }).eq("id", profile.id);
+  revalidatePath("/", "layout");
+  redirect(on ? "/connect" : "/admin/rules?saved=self");
+}

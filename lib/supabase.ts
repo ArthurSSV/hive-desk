@@ -25,7 +25,7 @@ export function serviceClient() {
   return createClient(URL(), serviceKey(), { auth: { persistSession: false } });
 }
 
-export type Profile = { id: string; name: string; email: string; role: "trader" | "admin"; wallet: string | null; created_at: string };
+export type Profile = { id: string; name: string; email: string; role: "trader" | "admin"; wallet: string | null; created_at: string; is_trader?: boolean };
 
 export async function requireUser(): Promise<{ sb: ReturnType<typeof userClient>; profile: Profile }> {
   const sb = userClient();

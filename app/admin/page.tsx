@@ -36,7 +36,7 @@ export default async function Admin() {
   const dist: [number, string, string][] = [[p1, "var(--muted)", "Фаза 1"], [p2, "var(--hive)", "Фаза 2"], [funded, "var(--green)", "Funded"], [failed, "var(--red)", "Failed"], [noAcc, "var(--line)", "Без счёта"]];
 
   const rows: Row[] = T.map(t => ({
-    id: t.p.id, name: t.p.name, email: t.p.email, unconfirmed: !!t.acc && !t.acc.balance_locked, team: t.p.team_id ? teamName.get(t.p.team_id) ?? null : null, fresh: t.fresh, level: t.level, phase: t.acc?.phase ?? null, status: t.acc?.status ?? null,
+    id: t.p.id, name: t.p.name, email: t.p.email, isAdmin: t.p.role === "admin", unconfirmed: !!t.acc && !t.acc.balance_locked, team: t.p.team_id ? teamName.get(t.p.team_id) ?? null : null, fresh: t.fresh, level: t.level, phase: t.acc?.phase ?? null, status: t.acc?.status ?? null,
     size: t.acc?.initial_balance ?? null, total: t.m.total, today: t.m.today, maxDD: t.m.maxDD, days: t.m.profitDays, trades: t.m.todayTrades,
     avgTrades: t.m.avgTrades, mood: t.m.mood, flags: t.flags.map(f => f.t).join(" · "), target: t.acc?.phase === 1 ? R.p1 : t.acc?.phase === 2 ? R.p2 : null,
   }));
