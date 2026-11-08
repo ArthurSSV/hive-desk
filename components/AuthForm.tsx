@@ -19,7 +19,7 @@ export default function AuthForm({ mode, notice, code }: { mode: "login" | "regi
     setBusy(true);
     const c = sb();
     if (reg) {
-      const { data, error } = await c.auth.signUp({ email, password, options: { data: { name: String(f.get("name")).trim(), invite: String(f.get("invite") || "").trim() }, emailRedirectTo: `${location.origin}/auth/callback` } });
+      const { data, error } = await c.auth.signUp({ email, password, options: { data: { name: String(f.get("name")).trim(), invite: String(f.get("invite") || "").trim() }, emailRedirectTo: `${location.origin}/auth/confirm` } });
       setBusy(false);
       if (error) return setErr(/database error saving new user|INVALID_INVITE/i.test(error.message) ? "Неверный код приглашения. Возьмите ссылку для регистрации у админа группы." : error.message);
       if (!data.session) return setInfo("Мы отправили письмо для подтверждения. Откройте ссылку из письма, затем войдите.");
@@ -41,6 +41,7 @@ export default function AuthForm({ mode, notice, code }: { mode: "login" | "regi
         {reg && <label className="field" htmlFor="name">Имя и первая буква фамилии<input id="name" name="name" placeholder="Например, Мирослав Д." autoComplete="name" /></label>}
         <label className="field" htmlFor="email">Email<input id="email" name="email" type="email" autoComplete="email" required /></label>
         <label className="field" htmlFor="password">Пароль<input id="password" name="password" type="password" autoComplete={reg ? "new-password" : "current-password"} required /></label>
+        {!reg && <Link href="/forgot" className="fine" style={{ justifySelf: "end", marginTop: -6 }}>Забыли пароль?</Link>}
         <div className="err" role="alert">{err}</div>
         {info && <div className="notice">{info}</div>}
         <button className="btn" type="submit" disabled={busy}>{busy ? "Подождите…" : reg ? "Создать аккаунт" : "Войти"}</button>

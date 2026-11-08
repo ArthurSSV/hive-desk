@@ -2,6 +2,8 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireAdmin, requireUser, serviceClient, userClient } from "@/lib/supabase";
+import { createClient } from "@supabase/supabase-js";
+import { supabaseUrl, anonKey, appUrl } from "@/lib/env";
 import { dayKey } from "@/lib/engine";
 import { syncAll, loadRules } from "@/lib/sync";
 import { normalizeRules } from "@/lib/rules";
@@ -163,4 +165,17 @@ export async function setSelfTrader(fd: FormData) {
   await sb.from("profiles").update({ is_trader: on }).eq("id", profile.id);
   revalidatePath("/", "layout");
   redirect(on ? "/connect" : "/admin/rules?saved=self");
+}
+
+// ---------- Админ: ссылка для сброса пароля ----------
+export async function sendPasswordReset(fd: FormData) {
+  await requireAdmin();
+  const user = String(fd.get("user"));
+  const { data: p } = await serviceClient().from("profiles").select("email").eq("id", user).single();
+  if (!p?.email) redirect(`/admin/trader/${user}?e=reset`);
+  // Отдельный клиент без cookies, чтобы не трогать сессию админа
+  const anon = createClient(supabaseUrl(), anonKey(), { auth: { persistSession: false, autoRefreshToken: false } });
+  const site = appUrl() || "https://hive-desk-nu.vercel.app";
+  const { error } = await anon.auth.resetPasswordForEmail(p!.email, { redirectTo: `${site}/auth/confirm?next=/reset` });
+  redirect(`/admin/trader/${user}?${error ? "e=reset" : "ok=reset"}`);
 }

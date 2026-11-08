@@ -4,7 +4,7 @@ import { requireAdmin } from "@/lib/supabase";
 import { traderBundle } from "@/lib/data";
 import TraderView from "@/components/TraderView";
 import ConfirmRemove from "@/components/ConfirmRemove";
-import { adminAccountAction, confirmAccount, syncUser } from "@/app/actions";
+import { adminAccountAction, confirmAccount, sendPasswordReset, syncUser } from "@/app/actions";
 import ConfirmButton from "@/components/ConfirmButton";
 import { PHASE_LABEL } from "@/lib/rules";
 import { usd } from "@/components/ui";
@@ -18,7 +18,10 @@ export default async function TraderCard({ params, searchParams }: { params: { i
   return (
     <>
       <div className="head"><Link href="/admin" className="fine">← Вся группа</Link>
-        <form action={syncUser}><input type="hidden" name="user" value={params.id} /><button className="btn ghost" type="submit">Синхронизировать сейчас</button></form></div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}><form action={syncUser}><input type="hidden" name="user" value={params.id} /><button className="btn ghost" type="submit">Синхронизировать сейчас</button></form>
+        <form action={sendPasswordReset}><input type="hidden" name="user" value={params.id} /><button className="btn ghost" type="submit" title={`Письмо уйдёт на ${b.profile.email}`}>Отправить ссылку для сброса пароля</button></form></div></div>
+      {searchParams.ok === "reset" && <div className="w l-green notice">Письмо со ссылкой для нового пароля отправлено на {b.profile.email}. Ссылка действует 1 час.</div>}
+      {searchParams.e === "reset" && <div className="w l-red notice">Не удалось отправить письмо. Возможно, лимит писем: подождите минуту и попробуйте снова.</div>}
       {searchParams.ok === "account" && <div className="w l-green notice">Счёт подтверждён, статистика пересчитана.</div>}
       {searchParams.e === "account" && <div className="w l-red notice">Укажите этап и начальный баланс не меньше $100.</div>}
       {b.acc && (
