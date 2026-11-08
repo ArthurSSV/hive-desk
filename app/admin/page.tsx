@@ -6,6 +6,7 @@ import { TempChart, PhaseTag } from "@/components/ui";
 import AdminTable, { type Row } from "@/components/AdminTable";
 import CopyReport from "@/components/CopyReport";
 import { LEVEL_LABEL } from "@/lib/rules";
+import { viewerTz } from "@/lib/tz";
 
 export const dynamic = "force-dynamic";
 
@@ -49,7 +50,7 @@ export default async function Admin() {
     <>
       <div className="head"><div>
         <div className="titlerow"><h1>Группа челленджа</h1><span className="count">{plural(T.length)}{fresh ? <small>+{fresh} сегодня</small> : null}</span></div>
-        <p className="sub">Classic 2-step · {lastSync ? `данные cTrader на ${new Date(lastSync).toLocaleString("ru-RU", { timeZone: "Europe/Kiev", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" })}` : "ждём первую синхронизацию"} · ссылка для регистрации: <span className="mono">{regLink}</span></p>
+        <p className="sub">Classic 2-step · {lastSync ? `данные cTrader на ${new Date(lastSync).toLocaleString("ru-RU", { timeZone: viewerTz(), day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" })}` : "ждём первую синхронизацию"} · ссылка для регистрации: <span className="mono">{regLink}</span></p>
       </div></div>
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
         <CopyReport text={regLink} label="Скопировать ссылку для регистрации" ghost />

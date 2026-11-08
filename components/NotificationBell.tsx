@@ -9,7 +9,7 @@ const ago = (iso: string) => {
   const m = Math.round((Date.now() - Date.parse(iso)) / 60000);
   if (m < 1) return "только что"; if (m < 60) return `${m} мин назад`;
   const h = Math.round(m / 60); if (h < 24) return `${h} ч назад`;
-  return new Date(iso).toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit", timeZone: "Europe/Kiev" });
+  return new Date(iso).toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit" });
 };
 
 /** Колокольчик админа: список событий и всплывающие уведомления о новых. */

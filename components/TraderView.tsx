@@ -4,6 +4,7 @@ import type { traderBundle } from "@/lib/data";
 import { saveJournal, syncMe } from "@/app/actions";
 import { EquityChart, Gauge, PhaseTag, Pill, cls, fmtD, sg, usd, type Day } from "./ui";
 import DealsHistory from "./DealsHistory";
+import { viewerTz, tzLabel } from "@/lib/tz";
 
 type B = Awaited<ReturnType<typeof traderBundle>>;
 
@@ -27,8 +28,8 @@ export default function TraderView({ b, mode }: { b: B; mode: "self" | "admin" }
   const leftDaily = R.daily - m.todayLoss, leftMax = R.max - m.maxDD;
   // Дневной лимит как у FundedHive: от баланса на начало дня
   const minBal = m.dayStart * (1 - R.daily / 100), remaining = Math.max(0, m.balanceNow - minBal);
-  const kyiv = (d: Date, o: Intl.DateTimeFormatOptions) => d.toLocaleString("ru-RU", { timeZone: "Europe/Kiev", ...o });
-  const reset = kyiv(nextDayStart(R.tz), { hour: "2-digit", minute: "2-digit" });
+  const vtz = viewerTz(), resetAt = nextDayStart(R.tz);
+  const reset = resetAt.toLocaleString("ru-RU", { timeZone: vtz, hour: "2-digit", minute: "2-digit" }) + " " + tzLabel(vtz, resetAt);
   const worstAt = m.worstDayLossAt ? new Date(m.worstDayLossAt + "T12:00:00Z").toLocaleDateString("ru-RU", { day: "numeric", month: "short", timeZone: "UTC" }) : null;
   const warns: { lv: string; t: string }[] = [];
   if (failed) warns.push({ lv: "failed", t: "Счёт закрыт по нарушению лимита." });
@@ -47,7 +48,7 @@ export default function TraderView({ b, mode }: { b: B; mode: "self" | "admin" }
       <div className="head">
         <div><div className="titlerow"><h1>{profile?.name}</h1><Pill level={level} /><PhaseTag phase={acc.phase} status={acc.status} /></div>
           <p className="sub">Счёт #{acc.trader_login || acc.ctid_trader_account_id} · {acc.broker_name || "cTrader"} · баланс {usd(acc.balance)} · старт фазы {usd(acc.initial_balance)}{self ? " · эти данные видите только вы и админ" : ` · ${profile?.email}`}</p></div>
-        <form action={syncMe}><span className="fine">{acc.last_synced_at ? `Обновлено ${new Date(acc.last_synced_at).toLocaleString("ru-RU", { timeZone: "Europe/Kiev", hour: "2-digit", minute: "2-digit", day: "2-digit", month: "2-digit" })}` : "Ещё не синхронизирован"} </span>{self && <button className="btn ghost" type="submit">Обновить</button>}</form>
+        <form action={syncMe}><span className="fine">{acc.last_synced_at ? `Обновлено ${new Date(acc.last_synced_at).toLocaleString("ru-RU", { timeZone: vtz, hour: "2-digit", minute: "2-digit", day: "2-digit", month: "2-digit" })}` : "Ещё не синхронизирован"} </span>{self && <button className="btn ghost" type="submit">Обновить</button>}</form>
       </div>
       {acc.sync_error && <div className="w l-yellow notice">Последняя синхронизация не удалась: {acc.sync_error}</div>}
       {warns.length > 0 && <div className="warn">{warns.map((w, i) => <div key={i} className={`w l-${w.lv}`}>{w.t}</div>)}</div>}
@@ -57,7 +58,7 @@ export default function TraderView({ b, mode }: { b: B; mode: "self" | "admin" }
         <Gauge icon="daily" k="Дневной убыток" v={failed ? "—" : `${m.todayLoss.toFixed(2)}%`} sub={`Допуск: ${R.daily}%`} pct={(m.todayLoss / R.daily) * 100} col={m.todayLoss >= R.redDaily ? "var(--red)" : "var(--gold)"} note={failed ? "Счёт закрыт" : <>
           Итог дня <span className={cls(m.todayPnlPct)}>{sg(m.todayPnlPct)}%</span>{m.todayWorst > 0 ? <> · худшая точка <span className="neg">−{m.todayWorst.toFixed(2)}%</span></> : null}<br />
           Мин. баланс <span className="mono">{usd2(minBal)}</span> · осталось <span className="mono">{usd2(remaining)}</span><br />
-          {worstAt ? <>Худший день {m.worstDayLoss.toFixed(2)}% · {worstAt} · </> : null}сброс в {reset} по Киеву</>} />
+          {worstAt ? <>Худший день {m.worstDayLoss.toFixed(2)}% · {worstAt} · </> : null}сброс в {reset}</>} />
         <Gauge icon="max" k="Общая просадка" v={`${m.maxDD.toFixed(2)}%`} sub={`Допуск: ${R.max}%`} pct={(m.maxDD / R.max) * 100} col={m.maxDD >= R.redDD ? "var(--red)" : "var(--red)"} note="С учётом плавающего убытка открытых позиций" />
         {target != null
           ? <Gauge icon="target" k="Цель прибыли" v={`${sg(m.total)}%`} sub={`Цель: ${target}%`} pct={(m.total / target) * 100} col="var(--green)" note={m.total >= target ? "Цель достигнута" : `Осталось ${(target - m.total).toFixed(2)}% · ${usd((init * (target - m.total)) / 100)}`} />
@@ -98,7 +99,7 @@ export default function TraderView({ b, mode }: { b: B; mode: "self" | "admin" }
         </div>
       </div>
 
-      <DealsHistory deals={b.deals} login={acc.trader_login || acc.ctid_trader_account_id} initial={init} accountId={acc.id} />
+      <DealsHistory deals={b.deals} login={acc.trader_login || acc.ctid_trader_account_id} initial={init} accountId={acc.id} tz={vtz} />
 
       <section className="panel"><div className="ph"><h2>История по дням</h2></div>
         <div className="tablewrap"><table className="daytbl"><thead><tr><th>Дата</th><th className="n">P&amp;L дня</th><th className="n">Итог фазы</th><th className="n">Сделки</th><th className="n">Макс. лот</th><th className="n">Настр.</th><th>План</th><th>Светофор</th></tr></thead>

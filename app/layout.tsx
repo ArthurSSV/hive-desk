@@ -4,6 +4,8 @@ import type { Metadata } from "next";
 import { userClient } from "@/lib/supabase";
 import { signOut } from "./actions";
 import NotificationBell from "@/components/NotificationBell";
+import TzCookie from "@/components/TzCookie";
+import { cookies } from "next/headers";
 
 export const metadata: Metadata = { title: "Матрёшка — Челлендж", description: "Отчётность группы по проп-челленджу" };
 
@@ -19,6 +21,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=JetBrains+Mono:wght@400;600;700&display=swap" />
       </head>
       <body>
+        <TzCookie current={cookies().get("tz")?.value ?? null} />
         <header className="top"><div className="wrap">
           <Link href="/" className="brand" style={{ color: "inherit", textDecoration: "none" }}>
             <svg width="24" height="28" viewBox="0 0 24 28" aria-hidden="true"><path d="M12 1.5c3.3 0 5.6 2.6 5.6 5.7 0 1.3-.4 2.4-1 3.4 2.6 1.6 4.4 4.6 4.4 8.3 0 5-4 7.6-9 7.6s-9-2.6-9-7.6c0-3.7 1.8-6.7 4.4-8.3-.6-1-1-2.1-1-3.4 0-3.1 2.3-5.7 5.6-5.7z" fill="none" stroke="var(--gold)" strokeWidth="1.6" /><circle cx="12" cy="7.4" r="2.6" fill="var(--gold)" /><path d="M7.6 18.6c1.2 1.6 2.8 2.4 4.4 2.4s3.2-.8 4.4-2.4" fill="none" stroke="var(--gold)" strokeWidth="1.6" strokeLinecap="round" /></svg>

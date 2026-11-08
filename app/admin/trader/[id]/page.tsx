@@ -8,6 +8,7 @@ import { adminAccountAction, confirmAccount, sendPasswordReset, syncUser } from 
 import ConfirmButton from "@/components/ConfirmButton";
 import { PHASE_LABEL } from "@/lib/rules";
 import { usd } from "@/components/ui";
+import { viewerTz } from "@/lib/tz";
 
 export const dynamic = "force-dynamic";
 
@@ -45,7 +46,7 @@ export default async function TraderCard({ params, searchParams }: { params: { i
               <div style={{ minWidth: 0 }}>
                 <b>#{a.trader_login || a.ctid_trader_account_id}</b> <span className="fine">{a.broker_name || ""} · {a.is_live ? "live" : "demo"}{a.balance != null ? ` · баланс ${usd(a.balance)}` : ""}</span>
                 <div className="fine">{a.active ? <span className="ok">Отслеживается · {PHASE_LABEL[a.phase]}</span> : "Не отслеживается"}</div>
-                {a.delete_requested_at && <div className="fine" style={{ color: "var(--amber)" }}>⚠ Трейдер просит удалить счёт · {new Date(a.delete_requested_at).toLocaleString("ru-RU", { timeZone: "Europe/Kiev", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</div>}
+                {a.delete_requested_at && <div className="fine" style={{ color: "var(--amber)" }}>⚠ Трейдер просит удалить счёт · {new Date(a.delete_requested_at).toLocaleString("ru-RU", { timeZone: viewerTz(), day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</div>}
               </div>
               <form action={adminAccountAction} style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
                 <input type="hidden" name="id" value={a.id} /><input type="hidden" name="user" value={params.id} />

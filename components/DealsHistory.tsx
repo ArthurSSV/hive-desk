@@ -5,11 +5,12 @@ import TradeChart, { type Bars } from "./TradeChart";
 type D = { deal_id: number; position_id: number | null; symbol: string | null; side: string | null; lots: number | null; price: number | null; entry_price: number | null; exec_ts: string; is_close: boolean; net_profit: number };
 
 const PAGE = 10;
-const dt = (iso: string) => new Date(iso).toLocaleString("ru-RU", { timeZone: "Europe/Kiev", day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit" });
+const dtIn = (tz: string) => (iso: string) => new Date(iso).toLocaleString("ru-RU", { timeZone: tz, day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit" });
 const px = (v: number | null) => (v == null ? "—" : Number(v).toLocaleString("en-US", { maximumFractionDigits: 5 }));
 
 /** История сделок: одна строка на закрытую позицию (или её часть). */
-export default function DealsHistory({ deals, login, initial, accountId }: { deals: D[]; login: number; initial: number; accountId: number }) {
+export default function DealsHistory({ deals, login, initial, accountId, tz }: { deals: D[]; login: number; initial: number; accountId: number; tz: string }) {
+  const dt = dtIn(tz);
   const [page, setPage] = useState(0), [q, setQ] = useState("");
   const [hover, setHover] = useState<{ key: number; pos: number; top: number; left: number; pinned: boolean } | null>(null);
   const [cache, setCache] = useState<Record<number, Bars | "loading" | "none">>({});

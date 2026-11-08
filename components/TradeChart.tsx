@@ -3,7 +3,7 @@
 
 export type Bars = { symbol: string | null; period: string; bars: number[][] };
 
-const fmtT = (min: number) => new Date(min * 60000).toLocaleString("ru-RU", { timeZone: "Europe/Kiev", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+const fmtT = (min: number) => new Date(min * 60000).toLocaleString("ru-RU", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
 const px = (v: number) => v.toLocaleString("en-US", { maximumFractionDigits: v > 100 ? 2 : 5 });
 
 export default function TradeChart({ data, openMs, closeMs, entry, exit, side }: { data: Bars; openMs: number | null; closeMs: number; entry: number | null; exit: number | null; side: string }) {
