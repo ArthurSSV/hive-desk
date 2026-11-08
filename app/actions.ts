@@ -31,8 +31,8 @@ export async function activateAccount(fd: FormData) {
   if (!acc || acc.removed) redirect("/connect");
   // У подтверждённого счёта поля этапа и баланса заблокированы и в форме не приходят
   if (!acc.balance_locked && (![1, 2, 3].includes(phase) || (initial != null && !(initial >= 100 && initial <= 10_000_000)))) redirect("/connect?error=" + encodeURIComponent("Проверьте этап и начальный баланс"));
-  // Одновременно отслеживается один счёт — остальные выключаем
-  await sb.from("ctrader_accounts").update({ active: false }).eq("user_id", profile.id).neq("id", id);
+  // Одновременно отслеживается один счёт — остальные выключаем (только реально включённые и не удалённые)
+  await serviceClient().from("ctrader_accounts").update({ active: false }).eq("user_id", profile.id).eq("active", true).neq("id", id);
   // Подтверждённые админом этап и баланс трейдер не меняет (это же проверяет база)
   const { error } = await sb.from("ctrader_accounts").update(acc.balance_locked ? { active: true } : { active: true, phase, initial_balance: initial }).eq("id", id).eq("user_id", profile.id);
   if (error) redirect("/connect?error=" + encodeURIComponent(error.message));

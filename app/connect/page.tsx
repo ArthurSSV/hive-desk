@@ -27,7 +27,7 @@ export default async function Connect({ searchParams }: { searchParams: { error?
                 {a.balance_locked ? <div className="fine">✓ Этап и баланс подтверждены админом, изменить может только он</div> : a.active ? <div className="fine" style={{ color: "var(--amber)" }}>Ждёт подтверждения админом</div> : null}
               </div>
               <div style={{ display: "grid", gap: 8, justifyItems: "end" }}>
-              <form action={activateAccount}>
+              <form action={activateAccount} autoComplete="off">
                 <input type="hidden" name="id" value={a.id} />
                 <label className="field" htmlFor={`ph-${a.id}`}>Этап
                   <select id={`ph-${a.id}`} name="phase" defaultValue={a.phase} disabled={a.balance_locked}><option value="1">Фаза 1</option><option value="2">Фаза 2</option><option value="3">Funded</option></select></label>

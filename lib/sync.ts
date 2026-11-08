@@ -13,11 +13,13 @@ type Account = {
 
 const HISTORY_DAYS = 120;
 
-async function validToken(sb: SupabaseClient, userId: string): Promise<string> {
+async function validToken(sb: SupabaseClient, userId: string, force = false): Promise<string> {
   const { data: t, error } = await sb.from("ctrader_tokens").select("*").eq("user_id", userId).single();
   if (error || !t) throw new Error("Нет токена cTrader: трейдеру нужно заново подключить счёт");
-  if (new Date(t.expires_at).getTime() - Date.now() > 3 * 24 * 3600 * 1000) return t.access_token;
-  const n = await refreshToken(t.refresh_token);
+  if (!force && new Date(t.expires_at).getTime() - Date.now() > 3 * 24 * 3600 * 1000) return t.access_token;
+  let n;
+  try { n = await refreshToken(t.refresh_token); }
+  catch { throw new Error("Доступ cTrader устарел: трейдеру нужно нажать «Обновить доступ cTrader» и отметить этот счёт"); }
   await sb.from("ctrader_tokens").update({
     access_token: n.accessToken, refresh_token: n.refreshToken,
     expires_at: new Date(Date.now() + n.expiresIn * 1000).toISOString(), updated_at: new Date().toISOString(),
@@ -32,11 +34,18 @@ export async function loadRules(sb: SupabaseClient): Promise<Rules> {
 
 /** Тянет новые сделки одного счёта из cTrader. */
 async function pullDeals(sb: SupabaseClient, acc: Account) {
-  const token = await validToken(sb, acc.user_id);
+  let token = await validToken(sb, acc.user_id);
   const c = await new CTraderConnection(acc.is_live).open();
   try {
     await c.appAuth();
-    await c.accountAuth(acc.ctid_trader_account_id, token);
+    try { await c.accountAuth(acc.ctid_trader_account_id, token); }
+    catch (e: any) {
+      if (!/ACCESS_TOKEN|NOT_AUTHORIZED|ACCOUNT_NOT/i.test(e.message)) throw e;
+      // Токен мог смениться при повторном подключении — обновляем и пробуем ещё раз
+      token = await validToken(sb, acc.user_id, true);
+      try { await c.accountAuth(acc.ctid_trader_account_id, token); }
+      catch { throw new Error("Нет доступа к счёту в cTrader: трейдеру нужно нажать «Обновить доступ cTrader» и отметить этот счёт"); }
+    }
     const trader = await c.trader(acc.ctid_trader_account_id);
     const md = trader.moneyDigits ?? 2;
     const balance = Number(trader.balance) / Math.pow(10, md);
