@@ -31,7 +31,7 @@ export default async function TraderCard({ params, searchParams }: { params: { i
             <button className="btn" type="submit">{b.acc.balance_locked ? "Сохранить" : "Подтвердить"}</button>
             {b.acc.balance_locked && <button className="btn ghost" type="submit" name="lock" value="0">Разрешить трейдеру менять</button>}
           </form>
-          <p className="fine" style={{ marginTop: 10 }}>Сверьте с Account Size в кабинете FundedHive. После подтверждения трейдер не может изменить этап и баланс.</p>
+          <p className="fine" style={{ marginTop: 10 }}>{b.acc.balance != null ? <>Текущий баланс в cTrader: <b className="mono" style={{ color: "var(--gold2)" }}>{usd(b.acc.balance)}</b> · </> : null}Сверьте с Account Size в кабинете FundedHive. После подтверждения трейдер не может изменить этап и баланс.</p>
         </section>)}
       {["remove", "reject"].includes(searchParams.ok || "") && <div className="w l-green notice">{searchParams.ok === "remove" ? "Счёт удалён вместе с историей." : "Запрос на удаление отклонён."}</div>}
       {b.accounts.some(a => !a.removed) && (
