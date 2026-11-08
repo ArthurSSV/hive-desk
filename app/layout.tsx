@@ -3,6 +3,7 @@ import Link from "next/link";
 import type { Metadata } from "next";
 import { userClient } from "@/lib/supabase";
 import { signOut } from "./actions";
+import NotificationBell from "@/components/NotificationBell";
 
 export const metadata: Metadata = { title: "Матрёшка — Челлендж", description: "Отчётность группы по проп-челленджу" };
 
@@ -30,6 +31,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               {admin && <Link href="/admin/teams">Команды</Link>}
               {admin && <Link href="/admin/rules">Правила</Link>}
               {!admin && <Link href="/dashboard">Мой кабинет</Link>}
+              {admin && <NotificationBell />}
               <form action={signOut}><button className="signout" type="submit">Выйти</button></form>
             </nav>
           )}
