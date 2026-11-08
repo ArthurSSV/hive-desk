@@ -13,10 +13,13 @@ export async function GET(req: NextRequest) {
 
   const code = req.nextUrl.searchParams.get("code");
   const state = req.nextUrl.searchParams.get("state");
-  const saved = cookies().get("ct_state")?.value;
+  const saved = cookies().get("ct_state")?.value || "";
   cookies().delete("ct_state");
+  const [savedState, savedUser] = [saved.slice(0, saved.indexOf(".")), saved.slice(saved.indexOf(".") + 1)];
   if (!code) return fail(req.nextUrl.searchParams.get("error_description") || "cTrader не вернул код доступа");
-  if (!saved || !state || saved !== state) return fail("Сессия подключения устарела. Нажмите «Войти через cTrader ID» ещё раз");
+  // cTrader может не возвращать state — тогда защищает метка в cookie: её ставит только наш сайт и только этому пользователю
+  if (!saved || savedUser !== user.id || (state && state !== savedState))
+    return fail("Подключение не завершилось: начните его кнопкой ниже на этой странице и не закрывайте вкладку");
 
   try {
     const tok = await exchangeCode(code, `${base}/api/ctrader/callback`);
