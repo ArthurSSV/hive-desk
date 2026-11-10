@@ -1,6 +1,9 @@
 "use client";
 import { useEffect, useMemo, useRef, useState } from "react";
 import TradeChart, { type Bars } from "./TradeChart";
+import { barsInWindow } from "@/lib/equity";
+
+const TFS = ["M1", "M5", "M15", "H1"];
 
 type D = { deal_id: number; position_id: number | null; symbol: string | null; side: string | null; lots: number | null; price: number | null; entry_price: number | null; exec_ts: string; is_close: boolean; net_profit: number };
 
@@ -12,8 +15,17 @@ const px = (v: number | null) => (v == null ? "—" : Number(v).toLocaleString("
 export default function DealsHistory({ deals, login, initial, accountId, tz }: { deals: D[]; login: number; initial: number; accountId: number; tz: string }) {
   const dt = dtIn(tz);
   const [page, setPage] = useState(0), [q, setQ] = useState("");
-  const [hover, setHover] = useState<{ key: number; pos: number; top: number; left: number; pinned: boolean } | null>(null);
-  const [cache, setCache] = useState<Record<number, Bars | "loading" | "none">>({});
+  const [hover, setHover] = useState<{ key: number; pos: number; top: number; left: number; pinned: boolean; tf: string } | null>(null);
+  // Ключ кэша: позиция и таймфрейм ("" — сохранённые при синхронизации свечи)
+  const [cache, setCache] = useState<Record<string, Bars | "loading" | "none" | { err: string }>>({});
+  function load(pos: number, tf: string) {
+    const k = `${pos}:${tf}`;
+    if (cache[k]) return;
+    setCache(c => ({ ...c, [k]: "loading" }));
+    fetch(`/api/bars?acc=${accountId}&pos=${pos}${tf ? `&tf=${tf}` : ""}`)
+      .then(async r => { const j = await r.json().catch(() => null); setCache(c => ({ ...c, [k]: r.ok && j?.bars ? j : tf ? { err: j?.error || "Не удалось загрузить свечи" } : "none" })); })
+      .catch(() => setCache(c => ({ ...c, [k]: tf ? { err: "Нет связи с сервером" } : "none" })));
+  }
   const hideT = useRef<ReturnType<typeof setTimeout>>();
   useEffect(() => { const k = (e: KeyboardEvent) => e.key === "Escape" && setHover(null); addEventListener("keydown", k); return () => removeEventListener("keydown", k); }, []);
   function show(e: React.MouseEvent<HTMLTableRowElement>, key: number, pos: number | null, pinned: boolean) {
@@ -22,11 +34,8 @@ export default function DealsHistory({ deals, login, initial, accountId, tz }: {
     const r = e.currentTarget.getBoundingClientRect(), w = Math.min(640, innerWidth - 32), h = 360;
     const left = Math.max(16, Math.min(e.clientX - w / 2, innerWidth - w - 16));
     const top = r.bottom + h + 8 < innerHeight ? r.bottom + 6 : Math.max(8, r.top - h - 6);
-    setHover(cur => (pinned && cur?.pinned && cur.key === key ? null : { key, pos, top, left, pinned }));
-    if (!cache[pos]) {
-      setCache(c => ({ ...c, [pos]: "loading" }));
-      fetch(`/api/bars?acc=${accountId}&pos=${pos}`).then(r => (r.ok ? r.json() : null)).then(j => setCache(c => ({ ...c, [pos]: j && j.bars ? j : "none" }))).catch(() => setCache(c => ({ ...c, [pos]: "none" })));
-    }
+    setHover(cur => (pinned && cur?.pinned && cur.key === key ? null : cur?.key === key ? { ...cur, pinned: pinned || cur.pinned } : { key, pos, top, left, pinned, tf: "" }));
+    load(pos, "");
   }
   const leave = () => { hideT.current = setTimeout(() => setHover(h => (h?.pinned ? h : null)), 120); };
   const rows = useMemo(() => {
@@ -67,18 +76,27 @@ export default function DealsHistory({ deals, login, initial, accountId, tz }: {
         </tbody></table></div>
       {hover && (() => {
         const row = rows.find(x => x.d.deal_id === hover.key); if (!row) return null;
-        const c = cache[hover.pos], { d, o, side } = row;
+        const { d, o, side } = row;
+        const base = cache[`${hover.pos}:`], c = cache[`${hover.pos}:${hover.tf}`];
+        const curTf = hover.tf || (base && typeof base === "object" && "bars" in base ? base.period : "");
+        const openMs = o ? Date.parse(o.exec_ts) : null, closeMs = Date.parse(d.exec_ts);
+        const pick = (tf: string) => { const t = base && typeof base === "object" && "bars" in base && base.period === tf ? "" : tf; setHover(h => (h ? { ...h, tf: t, pinned: true } : h)); load(hover.pos, t); };
         return (
           <div role="dialog" aria-label="График сделки" onMouseEnter={() => clearTimeout(hideT.current)} onMouseLeave={leave}
             style={{ position: "fixed", zIndex: 30, top: hover.top, left: hover.left, width: "min(640px, calc(100vw - 32px))", padding: 14, borderRadius: 12, background: "var(--surface)", border: "1px solid var(--gold-dim)", boxShadow: "0 18px 50px rgba(0,0,0,.6)" }}>
             <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center", marginBottom: 8, flexWrap: "wrap" }}>
-              <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}><b>{d.symbol}</b><span className={`side ${side}`}>{side === "buy" ? "BUY" : "SELL"}</span><span className="mono fine">{d.lots != null ? Number(d.lots).toFixed(2) : "—"} лот · #{d.position_id}{c && typeof c === "object" ? ` · ${c.period}` : ""}</span></div>
+              <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}><b>{d.symbol}</b><span className={`side ${side}`}>{side === "buy" ? "BUY" : "SELL"}</span><span className="mono fine">{d.lots != null ? Number(d.lots).toFixed(2) : "—"} лот · #{d.position_id}</span>
+                <span className="tfs" role="group" aria-label="Таймфрейм">{TFS.map(tf => {
+                  const off = openMs == null || barsInWindow(openMs, closeMs, tf) > 3000;
+                  return <button key={tf} type="button" disabled={off} aria-pressed={curTf === tf} title={off ? "Слишком много свечей для этой сделки" : undefined} onClick={() => pick(tf)}>{tf}</button>;
+                })}</span></div>
               <div style={{ display: "flex", gap: 10, alignItems: "center" }}><b className={`mono ${Number(d.net_profit) >= 0 ? "pos" : "neg"}`}>{Number(d.net_profit) < 0 ? "-" : "+"}${Math.abs(Number(d.net_profit)).toFixed(2)}</b>
                 {hover.pinned && <button type="button" className="signout" style={{ margin: 0 }} onClick={() => setHover(null)}>Закрыть</button>}</div>
             </div>
             {c === "loading" || c === undefined ? <p className="fine" style={{ height: 260, display: "grid", placeItems: "center", margin: 0 }}>Загружаю график…</p>
               : c === "none" ? <p className="fine" style={{ height: 80, display: "grid", placeItems: "center", margin: 0 }}>График появится после следующей синхронизации (до 15 минут).</p>
-              : <TradeChart data={c} openMs={o ? Date.parse(o.exec_ts) : null} closeMs={Date.parse(d.exec_ts)} entry={d.entry_price ?? o?.price ?? null} exit={d.price} side={side} />}
+              : "err" in c ? <p className="fine" style={{ height: 80, display: "grid", placeItems: "center", margin: 0, color: "var(--red)" }}>{c.err}</p>
+              : <TradeChart data={c} openMs={openMs} closeMs={closeMs} entry={d.entry_price ?? o?.price ?? null} exit={d.price} side={side} />}
             <div className="fine" style={{ display: "flex", justifyContent: "space-between", gap: 8, marginTop: 6, flexWrap: "wrap" }}>
               <span>Вход {o ? dt(o.exec_ts) : "—"} по {px(d.entry_price ?? o?.price ?? null)}</span><span>Выход {dt(d.exec_ts)} по {px(d.price)}</span></div>
           </div>);

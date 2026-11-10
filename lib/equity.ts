@@ -45,13 +45,24 @@ export function periodFor(ms: number): { period: number; label: string; min: num
   return { period: 9, label: "H1", min: 60 };
 }
 
-/** Окно графика: сделка плюс поля по краям. */
-export function chartWindow(p: Position, nowMs = Date.now()) {
+export const TF: Record<string, { period: number; label: string; min: number }> = {
+  M1: { period: 1, label: "M1", min: 1 }, M5: { period: 5, label: "M5", min: 5 },
+  M15: { period: 7, label: "M15", min: 15 }, H1: { period: 9, label: "H1", min: 60 },
+};
+
+/** Окно графика: сделка плюс поля по краям. tf — принудительный таймфрейм (кнопки на графике). */
+export function chartWindow(p: Pick<Position, "openMs" | "closeMs">, nowMs = Date.now(), tf?: string) {
   const end = p.closeMs ?? nowMs;
   const dur = Math.max(end - p.openMs, 60_000);
-  const pf = periodFor(dur);
+  const pf = (tf && TF[tf]) || periodFor(dur);
   const pad = Math.max(dur * 0.25, pf.min * 60_000 * 20);
-  return { ...pf, from: p.openMs - pad, to: Math.min(end + pad, nowMs) };
+  return { ...pf, from: p.openMs - pad, to: Math.min(end + pad, nowMs), end, pad };
+}
+
+/** Сколько свечей займёт окно на таймфрейме — чтобы не предлагать M1 для недельной сделки. */
+export function barsInWindow(openMs: number, closeMs: number | null, tf: string, nowMs = Date.now()) {
+  const w = chartWindow({ openMs, closeMs }, nowMs, tf);
+  return (w.to - w.from) / (w.min * 60_000);
 }
 
 /** Минимальное эквити за каждый день: баланс по закрытым сделкам + худший плавающий P&L открытых позиций. */

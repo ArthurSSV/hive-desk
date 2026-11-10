@@ -32,8 +32,8 @@ export async function loadRules(sb: SupabaseClient): Promise<Rules> {
   return normalizeRules(data?.rules);
 }
 
-/** Тянет новые сделки одного счёта из cTrader. */
-async function pullDeals(sb: SupabaseClient, acc: Account) {
+/** Открывает соединение cTrader и авторизует счёт (с повтором после обновления токена). */
+export async function openAccount(sb: SupabaseClient, acc: Pick<Account, "user_id" | "is_live" | "ctid_trader_account_id">): Promise<CTraderConnection> {
   let token = await validToken(sb, acc.user_id);
   const c = await new CTraderConnection(acc.is_live).open();
   try {
@@ -46,6 +46,14 @@ async function pullDeals(sb: SupabaseClient, acc: Account) {
       try { await c.accountAuth(acc.ctid_trader_account_id, token); }
       catch { throw new Error("Нет доступа к счёту в cTrader: трейдеру нужно нажать «Обновить доступ cTrader» и отметить этот счёт"); }
     }
+    return c;
+  } catch (e) { c.close(); throw e; }
+}
+
+/** Тянет новые сделки одного счёта из cTrader. */
+async function pullDeals(sb: SupabaseClient, acc: Account) {
+  const c = await openAccount(sb, acc);
+  try {
     const trader = await c.trader(acc.ctid_trader_account_id);
     const md = trader.moneyDigits ?? 2;
     const balance = Number(trader.balance) / Math.pow(10, md);
@@ -92,16 +100,22 @@ const DEAL_COLS = "position_id,symbol_id,symbol,side,volume,exec_ts,is_close,pri
 async function pullBars(sb: SupabaseClient, c: CTraderConnection, acc: Account) {
   const { data: deals } = await sb.from("deals").select(DEAL_COLS).eq("account_id", acc.id).order("exec_ts");
   const positions = buildPositions((deals || []) as RawDeal[]);
-  const { data: have } = await sb.from("position_bars").select("position_id,closed").eq("account_id", acc.id);
-  const done = new Set((have || []).filter(h => h.closed).map(h => Number(h.position_id)));
+  const { data: have } = await sb.from("position_bars").select("position_id,closed,updated_at").eq("account_id", acc.id);
+  const saved = new Map((have || []).map(h => [Number(h.position_id), h]));
   const sym = new Map((deals || []).map((d: any) => [Number(d.position_id), d.symbol]));
+  let redo = 0;
   for (const p of positions) {
-    if (done.has(p.id)) continue;
     const w = chartWindow(p);
+    // Свечи окончательные, только когда загружено всё окно: сделка и поле справа после выхода.
+    // Раньше их фиксировали сразу после закрытия, и график обрывался до точки выхода — такие догружаем.
+    const full = p.closeMs != null && w.to >= w.end + w.pad - 1;
+    const h = saved.get(p.id);
+    if (h?.closed && Date.parse(h.updated_at) >= w.end + w.pad) continue;
+    if (h?.closed && redo++ >= 15) continue; // старые обрывы — понемногу за каждый запуск, чтобы не упереться в лимиты cTrader
     const bars = await c.trendbars(acc.ctid_trader_account_id, p.symbolId, w.period, Math.floor(w.from), Math.floor(w.to));
     const { error } = await sb.from("position_bars").upsert({
       account_id: acc.id, position_id: p.id, user_id: acc.user_id, symbol: sym.get(p.id) ?? null,
-      period: w.label, bars, closed: p.closeMs != null && w.to >= (p.closeMs ?? 0), updated_at: new Date().toISOString(),
+      period: w.label, bars, closed: full, updated_at: new Date().toISOString(),
     });
     if (error) throw error;
   }
