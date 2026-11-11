@@ -93,7 +93,8 @@ export default function EquityCurve({ deals, initial: init, totalPct, target, ma
             </div>)}
         </div>)}
       <div className="stats" style={{ marginTop: 12, gridTemplateColumns: "repeat(auto-fit, minmax(124px, 1fr))" }}>
-        <div><div className="k">Баланс</div><div className="v" style={{ fontSize: 15, lineHeight: "27px" }}>{money(pts[n - 1].bal)}</div></div>
+        <div><div className="k">Баланс</div><div className="v" style={{ fontSize: 15, lineHeight: "27px" }}>{money(pts[n - 1].bal)}</div>
+          <div className="fine mono" style={{ marginTop: 2 }}><span className={cur >= 0 ? "pos" : "neg"}>{sgn(cur)}{Math.abs(cur).toFixed(2)}%</span> за фазу</div></div>
         <div><div className="k">Winrate дней</div><div className="v">{stats.winRate}%</div></div>
         <div><div className="k">Торговых дней</div><div className="v">{stats.tradingDays}</div></div>
         <div><div className="k">Лучший день</div><div className="v pos">{fmt(stats.best)}</div></div>
