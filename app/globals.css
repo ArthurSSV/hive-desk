@@ -217,3 +217,6 @@ textarea{font:inherit;background:var(--sunk);color:var(--fg);border:1px solid va
 .jdays a[aria-current="true"]{border-color:var(--gold);color:var(--gold)}
 .jdays i{width:7px;height:7px;border-radius:50%;border:1.5px solid var(--muted)}
 .jdays i.on{background:var(--green);border-color:var(--green)}
+
+.eqtip{position:absolute;pointer-events:none;background:var(--sunk);border:1px solid var(--gold-dim);border-radius:9px;padding:8px 10px;font-size:12px;white-space:nowrap;box-shadow:0 12px 30px rgba(0,0,0,.6);z-index:5}
+.eqtip b{display:block;font-weight:800}

@@ -2,8 +2,9 @@ import Link from "next/link";
 import { dayKey, nextDayStart, isLateEntry, journalDays } from "@/lib/engine";
 import type { traderBundle } from "@/lib/data";
 import { saveJournal, syncMe } from "@/app/actions";
-import { EquityChart, Gauge, PhaseTag, Pill, cls, fmtD, sg, usd, type Day } from "./ui";
+import { Gauge, PhaseTag, Pill, cls, fmtD, sg, usd } from "./ui";
 import DealsHistory from "./DealsHistory";
+import EquityCurve from "./EquityCurve";
 import { viewerTz, tzLabel } from "@/lib/tz";
 
 type B = Awaited<ReturnType<typeof traderBundle>>;
@@ -78,13 +79,7 @@ export default function TraderView({ b, mode, journalDay, journalSaved, journalE
 
       <div className="grid2">
         <section className="panel">
-          <div className="ph"><h2>Кривая результата</h2><span className="fine">% от начального баланса · по закрытым сделкам</span></div>
-          <EquityChart days={days as Day[]} target={target} max={R.max} />
-          <div className="stats" style={{ marginTop: 12 }}>
-            <div><div className="k">Winrate дней</div><div className="v">{m.winRate}%</div></div>
-            <div><div className="k">Лучший день</div><div className="v pos">{sg(m.best)}%</div></div>
-            <div><div className="k">Худший день</div><div className="v neg">{sg(m.worst)}%</div></div>
-          </div>
+          <EquityCurve deals={b.deals} initial={init} totalPct={m.total} target={target} max={R.max} tz={vtz} stats={{ winRate: m.winRate, tradingDays: m.tradingDays, best: m.best, worst: m.worst }} />
         </section>
         <div style={{ display: "grid", gap: 20, alignContent: "start", minWidth: 0 }}>
           {self ? (
