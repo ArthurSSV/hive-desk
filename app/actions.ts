@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { requireAdmin, requireUser, serviceClient, userClient } from "@/lib/supabase";
 import { createClient } from "@supabase/supabase-js";
 import { supabaseUrl, anonKey, appUrl } from "@/lib/env";
-import { dayKey, addDays, JOURNAL_BACK_DAYS } from "@/lib/engine";
+import { dayKey, journalDays } from "@/lib/engine";
 import { syncAll, loadRules, recompute } from "@/lib/sync";
 import { normalizeRules } from "@/lib/rules";
 
@@ -17,9 +17,10 @@ export async function saveJournal(fd: FormData) {
   const { sb, profile } = await requireUser();
   const rules = await loadRules(sb);
   const today = dayKey(new Date(), rules.tz);
-  const day = String(fd.get("day") || today);
-  // Заполнять и править можно сегодня и три предыдущих дня
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || day > today || day < addDays(today, -JOURNAL_BACK_DAYS)) redirect("/dashboard?je=window#journal");
+  const open = journalDays(today);
+  const day = String(fd.get("day") || open[open.length - 1]);
+  // Заполнять и править можно сегодня и три предыдущих торговых дня (выходные не считаются)
+  if (!open.includes(day)) redirect("/dashboard?je=window#journal");
   const mood = Number(fd.get("mood")) || null;
   const plan = fd.get("plan") === "1" ? true : fd.get("plan") === "0" ? false : null;
   const note = String(fd.get("note") || "").slice(0, 2000);

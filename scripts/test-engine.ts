@@ -1,6 +1,6 @@
 // Проверка движка метрик на синтетических сделках: npm test
 import assert from "node:assert/strict";
-import { computeAccount, summarize, isProfitDay, nextDayStart, addDays, isLateEntry } from "../lib/engine";
+import { computeAccount, summarize, isProfitDay, nextDayStart, addDays, isLateEntry, journalDays } from "../lib/engine";
 import { DEFAULT_RULES, zoneOf } from "../lib/rules";
 import { buildPositions, minEquityByDay } from "../lib/equity";
 
@@ -87,6 +87,10 @@ assert.equal(addDays("2026-11-09", -3), "2026-11-06"); assert.equal(addDays("202
 assert.equal(isLateEntry("2026-11-11", "2026-11-11T23:30:00Z", "UTC"), false); // 01:30 по Киеву — ещё тот же торговый день
 assert.equal(isLateEntry("2026-11-11", "2026-11-12T00:10:00Z", "UTC"), true);
 assert.equal(isLateEntry("2026-11-11", null, "UTC"), false);
+
+assert.deepEqual(journalDays("2026-11-11"), ["2026-11-06", "2026-11-09", "2026-11-10", "2026-11-11"]); // среда: пт, пн, вт, ср
+assert.deepEqual(journalDays("2026-11-09"), ["2026-11-04", "2026-11-05", "2026-11-06", "2026-11-09"]); // понедельник: ср, чт, пт, пн
+assert.deepEqual(journalDays("2026-11-08"), ["2026-11-04", "2026-11-05", "2026-11-06"]);               // воскресенье: без «сегодня»
 
 // 8. Зоны светофора по результату фазы
 assert.equal(zoneOf(6, 1, R), "green"); assert.equal(zoneOf(5.9, 1, R), "work");

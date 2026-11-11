@@ -39,8 +39,17 @@ export function dayKey(d: Date, tz: string): string {
 /** Сдвиг даты YYYY-MM-DD на n дней. */
 export const addDays = (day: string, n: number) => new Date(Date.parse(day + "T00:00:00Z") + n * 86400_000).toISOString().slice(0, 10);
 
-/** Сколько дней назад можно заполнить или поправить дневник (в понедельник доступна пятница). */
+/** Сколько торговых дней назад можно заполнить или поправить дневник. */
 export const JOURNAL_BACK_DAYS = 3;
+
+const isWeekday = (day: string) => { const w = new Date(day + "T00:00:00Z").getUTCDay(); return w !== 0 && w !== 6; };
+
+/** Дни, за которые открыт дневник: сегодня и три предыдущих торговых дня. Выходные не считаются. */
+export function journalDays(today: string): string[] {
+  const out: string[] = isWeekday(today) ? [today] : [];
+  for (let d = addDays(today, -1), n = 0; n < JOURNAL_BACK_DAYS; d = addDays(d, -1)) if (isWeekday(d)) { out.unshift(d); n++; }
+  return out;
+}
 
 /** Запись сделана позже своего торгового дня. */
 export const isLateEntry = (day: string, updatedAt: string | null | undefined, tz: string) => !!updatedAt && dayKey(new Date(updatedAt), tz) > day;

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { dayKey, nextDayStart, addDays, isLateEntry, JOURNAL_BACK_DAYS } from "@/lib/engine";
+import { dayKey, nextDayStart, isLateEntry, journalDays } from "@/lib/engine";
 import type { traderBundle } from "@/lib/data";
 import { saveJournal, syncMe } from "@/app/actions";
 import { EquityChart, Gauge, PhaseTag, Pill, cls, fmtD, sg, usd, type Day } from "./ui";
@@ -44,9 +44,9 @@ export default function TraderView({ b, mode, journalDay, journalSaved, journalE
   }
   const today = dayKey(new Date(), R.tz);
   const notesById = new Map(journal.map((j: any) => [j.day, j]));
-  // Дневник можно заполнить за сегодня и три предыдущих дня
-  const jDays = Array.from({ length: JOURNAL_BACK_DAYS + 1 }, (_, i) => addDays(today, i - JOURNAL_BACK_DAYS));
-  const jDay = journalDay && jDays.includes(journalDay) ? journalDay : today;
+  // Дневник можно заполнить за сегодня и три предыдущих торговых дня; в выходные открыт последний торговый
+  const jDays = journalDays(today);
+  const jDay = journalDay && jDays.includes(journalDay) ? journalDay : jDays[jDays.length - 1];
   const jt: any = notesById.get(jDay);
   const late = (j: any) => isLateEntry(j.day, j.updated_at, R.tz);
   const lateNote = (j: any) => `заполнено ${fmtD(dayKey(new Date(j.updated_at), R.tz))}`;
@@ -90,9 +90,9 @@ export default function TraderView({ b, mode, journalDay, journalSaved, journalE
           {self ? (
             <section className="panel" id="journal"><div className="ph"><h2>Дневник за {fmtD(jDay)}</h2>{jDay !== today && <span className="fine">задним числом</span>}</div>
               <nav className="jdays" aria-label="День дневника">{jDays.map(d => { const has = notesById.has(d); return (
-                <Link key={d} href={d === today ? "/dashboard#journal" : `/dashboard?jd=${d}#journal`} scroll={false} aria-current={d === jDay ? "true" : undefined} title={has ? "Заполнен" : "Не заполнен"}>
+                <Link key={d} href={`/dashboard?jd=${d}#journal`} scroll={false} aria-current={d === jDay ? "true" : undefined} title={has ? "Заполнен" : "Не заполнен"}>
                   <i className={has ? "on" : ""} />{d === today ? "Сегодня" : fmtD(d)}</Link>); })}</nav>
-              {journalError && <div className="w l-red" style={{ marginBottom: 10 }}>Этот день уже закрыт: дневник можно заполнить за сегодня и три предыдущих дня.</div>}
+              {journalError && <div className="w l-red" style={{ marginBottom: 10 }}>Этот день закрыт: дневник можно заполнить за сегодня и три предыдущих торговых дня.</div>}
               <form className="journal" action={saveJournal} key={jDay}>
                 <input type="hidden" name="day" value={jDay} />
                 <div><div className="fine" style={{ marginBottom: 6 }}>Состояние</div>
@@ -101,7 +101,7 @@ export default function TraderView({ b, mode, journalDay, journalSaved, journalE
                   <div className="seg"><label><input type="radio" name="plan" value="1" defaultChecked={jt?.plan === true} />Да</label><label><input type="radio" name="plan" value="0" defaultChecked={jt?.plan === false} />Нет</label></div></div>
                 <textarea name="note" id="note" placeholder="Что сработало, что нет (необязательно)" defaultValue={jt?.note || ""} />
                 <div style={{ display: "flex", gap: 12, alignItems: "center" }}><button className="btn" type="submit">Сохранить</button>{jt && <span className="saved">{journalSaved ? "Сохранено" : "Заполнен"}{late(jt) ? ` · ${lateNote(jt)}` : ""}</span>}</div>
-                <p className="fine" style={{ margin: 0 }}>Заполнить или поправить можно за сегодня и три предыдущих дня.</p>
+                <p className="fine" style={{ margin: 0 }}>Заполнить или поправить можно за сегодня и три предыдущих торговых дня. Выходные не считаются.</p>
               </form></section>
           ) : (
             <section className="panel"><div className="ph"><h2>Дневник</h2></div>
