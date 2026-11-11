@@ -4,8 +4,8 @@ import { redirect } from "next/navigation";
 import { requireAdmin, requireUser, serviceClient, userClient } from "@/lib/supabase";
 import { createClient } from "@supabase/supabase-js";
 import { supabaseUrl, anonKey, appUrl } from "@/lib/env";
-import { dayKey } from "@/lib/engine";
-import { syncAll, loadRules } from "@/lib/sync";
+import { dayKey, addDays, JOURNAL_BACK_DAYS } from "@/lib/engine";
+import { syncAll, loadRules, recompute } from "@/lib/sync";
 import { normalizeRules } from "@/lib/rules";
 
 export async function signOut() {
@@ -16,12 +16,22 @@ export async function signOut() {
 export async function saveJournal(fd: FormData) {
   const { sb, profile } = await requireUser();
   const rules = await loadRules(sb);
-  const day = (fd.get("day") as string) || dayKey(new Date(), rules.tz);
+  const today = dayKey(new Date(), rules.tz);
+  const day = String(fd.get("day") || today);
+  // Заполнять и править можно сегодня и три предыдущих дня
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || day > today || day < addDays(today, -JOURNAL_BACK_DAYS)) redirect("/dashboard?je=window#journal");
   const mood = Number(fd.get("mood")) || null;
   const plan = fd.get("plan") === "1" ? true : fd.get("plan") === "0" ? false : null;
   const note = String(fd.get("note") || "").slice(0, 2000);
   await sb.from("journal").upsert({ user_id: profile.id, day, mood, plan, note, updated_at: new Date().toISOString() });
-  revalidatePath("/dashboard");
+  // Флаги «нет отчёта» и «не по плану» зависят от дневника — пересчитываем сразу, не дожидаясь синхронизации
+  try {
+    const svc = serviceClient();
+    const { data: accs } = await svc.from("ctrader_accounts").select("*").eq("user_id", profile.id).eq("active", true).eq("removed", false);
+    for (const a of accs || []) if (a.initial_balance != null) await recompute(svc, a, rules, Number(a.initial_balance));
+  } catch { /* пересчитает ближайшая синхронизация */ }
+  revalidatePath("/dashboard"); revalidatePath(`/admin/trader/${profile.id}`); revalidatePath("/admin");
+  redirect(`/dashboard?jd=${day}&js=1#journal`);
 }
 
 export async function activateAccount(fd: FormData) {

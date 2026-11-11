@@ -5,9 +5,9 @@ import TraderView from "@/components/TraderView";
 
 export const dynamic = "force-dynamic";
 
-export default async function Dashboard() {
+export default async function Dashboard({ searchParams }: { searchParams: { jd?: string; js?: string; je?: string } }) {
   const { sb, profile } = await requireUser();
   if (profile.role === "admin" && !profile.is_trader) redirect("/admin");
   const b = await traderBundle(sb, profile.id);
-  return <TraderView b={b} mode="self" />;
+  return <TraderView b={b} mode="self" journalDay={searchParams.jd} journalSaved={!!searchParams.js} journalError={!!searchParams.je} />;
 }

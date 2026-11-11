@@ -210,3 +210,10 @@ textarea{font:inherit;background:var(--sunk);color:var(--fg);border:1px solid va
 .tfs button[aria-pressed="true"]{background:var(--gold);color:var(--accent-ink)}
 .tfs button:disabled{opacity:.35;cursor:not-allowed}
 .tfs button:focus-visible{outline:2px solid var(--gold);outline-offset:1px}
+
+.jdays{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
+.jdays a{display:inline-flex;align-items:center;gap:6px;padding:5px 10px;border-radius:7px;border:1px solid var(--line2);background:var(--sunk);color:var(--muted);text-decoration:none;font-weight:700;font-size:12px}
+.jdays a:hover{color:var(--fg)}
+.jdays a[aria-current="true"]{border-color:var(--gold);color:var(--gold)}
+.jdays i{width:7px;height:7px;border-radius:50%;border:1.5px solid var(--muted)}
+.jdays i.on{background:var(--green);border-color:var(--green)}

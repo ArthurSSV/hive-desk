@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { dayKey, nextDayStart } from "@/lib/engine";
+import { dayKey, nextDayStart, addDays, isLateEntry, JOURNAL_BACK_DAYS } from "@/lib/engine";
 import type { traderBundle } from "@/lib/data";
 import { saveJournal, syncMe } from "@/app/actions";
 import { EquityChart, Gauge, PhaseTag, Pill, cls, fmtD, sg, usd, type Day } from "./ui";
@@ -10,7 +10,7 @@ type B = Awaited<ReturnType<typeof traderBundle>>;
 
 const usd2 = (n: number) => "$" + n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-export default function TraderView({ b, mode }: { b: B; mode: "self" | "admin" }) {
+export default function TraderView({ b, mode, journalDay, journalSaved, journalError }: { b: B; mode: "self" | "admin"; journalDay?: string; journalSaved?: boolean; journalError?: boolean }) {
   const { acc, days, m, rules: R, profile, journal, chain } = b;
   const self = mode === "self";
   if (!acc) return (
@@ -43,8 +43,13 @@ export default function TraderView({ b, mode }: { b: B; mode: "self" | "admin" }
     for (const f of (last?.flags || []) as any[]) if (!/лимит|Просадка|Дневной/.test(f.t)) warns.push(f);
   }
   const today = dayKey(new Date(), R.tz);
-  const jt: any = journal.find((j: any) => j.day === today);
   const notesById = new Map(journal.map((j: any) => [j.day, j]));
+  // Дневник можно заполнить за сегодня и три предыдущих дня
+  const jDays = Array.from({ length: JOURNAL_BACK_DAYS + 1 }, (_, i) => addDays(today, i - JOURNAL_BACK_DAYS));
+  const jDay = journalDay && jDays.includes(journalDay) ? journalDay : today;
+  const jt: any = notesById.get(jDay);
+  const late = (j: any) => isLateEntry(j.day, j.updated_at, R.tz);
+  const lateNote = (j: any) => `заполнено ${fmtD(dayKey(new Date(j.updated_at), R.tz))}`;
 
   return (
     <>
@@ -83,19 +88,24 @@ export default function TraderView({ b, mode }: { b: B; mode: "self" | "admin" }
         </section>
         <div style={{ display: "grid", gap: 20, alignContent: "start", minWidth: 0 }}>
           {self ? (
-            <section className="panel"><div className="ph"><h2>Дневник за {fmtD(today)}</h2></div>
-              <form className="journal" action={saveJournal}>
-                <input type="hidden" name="day" value={today} />
+            <section className="panel" id="journal"><div className="ph"><h2>Дневник за {fmtD(jDay)}</h2>{jDay !== today && <span className="fine">задним числом</span>}</div>
+              <nav className="jdays" aria-label="День дневника">{jDays.map(d => { const has = notesById.has(d); return (
+                <Link key={d} href={d === today ? "/dashboard#journal" : `/dashboard?jd=${d}#journal`} scroll={false} aria-current={d === jDay ? "true" : undefined} title={has ? "Заполнен" : "Не заполнен"}>
+                  <i className={has ? "on" : ""} />{d === today ? "Сегодня" : fmtD(d)}</Link>); })}</nav>
+              {journalError && <div className="w l-red" style={{ marginBottom: 10 }}>Этот день уже закрыт: дневник можно заполнить за сегодня и три предыдущих дня.</div>}
+              <form className="journal" action={saveJournal} key={jDay}>
+                <input type="hidden" name="day" value={jDay} />
                 <div><div className="fine" style={{ marginBottom: 6 }}>Состояние</div>
                   <div className="moods">{[1, 2, 3, 4, 5].map(v => <span key={v} style={{ flex: 1, display: "flex" }}><input type="radio" name="mood" id={`m${v}`} value={v} defaultChecked={jt?.mood === v} /><label htmlFor={`m${v}`} style={{ flex: 1 }}>{v}</label></span>)}</div></div>
                 <div><div className="fine" style={{ marginBottom: 6 }}>Торговал по плану?</div>
                   <div className="seg"><label><input type="radio" name="plan" value="1" defaultChecked={jt?.plan === true} />Да</label><label><input type="radio" name="plan" value="0" defaultChecked={jt?.plan === false} />Нет</label></div></div>
                 <textarea name="note" id="note" placeholder="Что сработало, что нет (необязательно)" defaultValue={jt?.note || ""} />
-                <div style={{ display: "flex", gap: 12, alignItems: "center" }}><button className="btn" type="submit">Сохранить</button>{jt && <span className="saved">Сохранено</span>}</div>
+                <div style={{ display: "flex", gap: 12, alignItems: "center" }}><button className="btn" type="submit">Сохранить</button>{jt && <span className="saved">{journalSaved ? "Сохранено" : "Заполнен"}{late(jt) ? ` · ${lateNote(jt)}` : ""}</span>}</div>
+                <p className="fine" style={{ margin: 0 }}>Заполнить или поправить можно за сегодня и три предыдущих дня.</p>
               </form></section>
           ) : (
             <section className="panel"><div className="ph"><h2>Дневник</h2></div>
-              <div className="events">{journal.slice(0, 8).map((j: any) => <div key={j.day}><span>{fmtD(j.day)} · настр. {j.mood ?? "—"} · {j.plan == null ? "—" : j.plan ? "по плану" : <span className="neg">не по плану</span>}{j.note ? <><br /><span className="fine">{j.note}</span></> : null}</span></div>)}
+              <div className="events">{journal.slice(0, 8).map((j: any) => <div key={j.day}><span>{fmtD(j.day)} · настр. {j.mood ?? "—"} · {j.plan == null ? "—" : j.plan ? "по плану" : <span className="neg">не по плану</span>}{late(j) ? <> · <span style={{ color: "var(--amber)" }}>{lateNote(j)}</span></> : null}{j.note ? <><br /><span className="fine">{j.note}</span></> : null}</span></div>)}
                 {!journal.length && <p className="fine">Записей пока нет.</p>}</div></section>
           )}
           <section className="panel"><div className="ph"><h2>Подключения</h2>{self && <Link href="/connect" className="fine">изменить</Link>}</div>
@@ -117,7 +127,7 @@ export default function TraderView({ b, mode }: { b: B; mode: "self" | "admin" }
               <td className="n">{d.trades || "—"}</td>
               <td className="n">{Number(d.max_lot) ? Number(d.max_lot).toFixed(2) : "—"}</td>
               <td className="n">{j?.mood ?? "—"}</td>
-              <td>{!j ? <span className="fine">нет отчёта</span> : j.plan == null ? "—" : j.plan ? "да" : <span className="neg">нет</span>}</td>
+              <td>{!j ? (self && jDays.includes(d.day) ? <Link href={`/dashboard?jd=${d.day}#journal`} className="fine">заполнить</Link> : <span className="fine">нет отчёта</span>) : <>{j.plan == null ? "—" : j.plan ? "да" : <span className="neg">нет</span>}{late(j) ? <span className="fine" style={{ color: "var(--amber)" }} title={lateNote(j)}> · позже</span> : null}</>}</td>
               <td>{d.breach ? <Pill level="failed" /> : <Pill level={d.level} />}</td>
             </tr>); })}
             {!days.length && <tr><td colSpan={8} className="fine">Данных пока нет.</td></tr>}</tbody></table></div>

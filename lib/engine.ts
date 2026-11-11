@@ -36,6 +36,15 @@ export function dayKey(d: Date, tz: string): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit" }).format(d);
 }
 
+/** Сдвиг даты YYYY-MM-DD на n дней. */
+export const addDays = (day: string, n: number) => new Date(Date.parse(day + "T00:00:00Z") + n * 86400_000).toISOString().slice(0, 10);
+
+/** Сколько дней назад можно заполнить или поправить дневник (в понедельник доступна пятница). */
+export const JOURNAL_BACK_DAYS = 3;
+
+/** Запись сделана позже своего торгового дня. */
+export const isLateEntry = (day: string, updatedAt: string | null | undefined, tz: string) => !!updatedAt && dayKey(new Date(updatedAt), tz) > day;
+
 /** Все будни от start до end включительно (YYYY-MM-DD). */
 export function weekdays(start: string, end: string): string[] {
   const out: string[] = [];

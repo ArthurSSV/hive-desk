@@ -1,6 +1,6 @@
 // Проверка движка метрик на синтетических сделках: npm test
 import assert from "node:assert/strict";
-import { computeAccount, summarize, isProfitDay, nextDayStart } from "../lib/engine";
+import { computeAccount, summarize, isProfitDay, nextDayStart, addDays, isLateEntry } from "../lib/engine";
 import { DEFAULT_RULES, zoneOf } from "../lib/rules";
 import { buildPositions, minEquityByDay } from "../lib/equity";
 
@@ -81,6 +81,12 @@ const s7w = summarize(r.days, 1, { today: "2026-11-08" });
 assert.equal(s7w.todayLoss, 0); assert.equal(Math.round(s7w.dayStart * 100) / 100, 48372.98);
 assert.equal(nextDayStart("UTC", new Date("2026-11-08T17:00:00Z")).toISOString(), "2026-11-09T00:00:00.000Z");
 assert.equal(nextDayStart("Europe/Kiev", new Date("2026-11-08T17:00:00Z")).toISOString(), "2026-11-08T22:00:00.000Z");
+
+// 7c. Дневник задним числом: окно и метка «заполнено позже» (по торговому дню, UTC)
+assert.equal(addDays("2026-11-09", -3), "2026-11-06"); assert.equal(addDays("2026-03-01", -1), "2026-02-28");
+assert.equal(isLateEntry("2026-11-11", "2026-11-11T23:30:00Z", "UTC"), false); // 01:30 по Киеву — ещё тот же торговый день
+assert.equal(isLateEntry("2026-11-11", "2026-11-12T00:10:00Z", "UTC"), true);
+assert.equal(isLateEntry("2026-11-11", null, "UTC"), false);
 
 // 8. Зоны светофора по результату фазы
 assert.equal(zoneOf(6, 1, R), "green"); assert.equal(zoneOf(5.9, 1, R), "work");
