@@ -46,7 +46,7 @@ export default async function Summary({ searchParams }: { searchParams: { day?: 
     sum.bestDay && sum.worstDay ? `Лучший день группы: ${fmtD(sum.bestDay.day)} ${money(sum.bestDay.pnl, true)} · худший: ${fmtD(sum.worstDay.day)} ${money(sum.worstDay.pnl, true)}` : null,
     `Итог группы: ${money(sum.cum, true)} (${sg(sum.cumPct)}%)`,
     `Зоны: 🟢 ${S.zones.green} · ⚪ ${S.zones.work} · 🟡 ${S.zones.yellow} · 🔴 ${S.zones.red}`,
-    `Фаза 1: ${S.phases.p1} · Фаза 2: ${S.phases.p2} · Funded: ${S.phases.funded} · Труп: ${S.phases.failed}`,
+    `Фаза 1: ${S.phases.p1} · Фаза 2: ${S.phases.p2} · Funded: ${S.phases.funded} · Failed: ${S.phases.failed}`,
     best ? `Лучший результат: ${best.name} ${sg(best.pnlPct!)}%` : null,
     worst ? `Слабее всех: ${worst.name} ${sg(worst.pnlPct!)}%` : null,
     `Требуют внимания: ${attention.length ? attention.map(t => `${t.name} (${LEVEL_LABEL[t.zone]})`).join(", ") : "нет"}`,
@@ -142,7 +142,7 @@ export default async function Summary({ searchParams }: { searchParams: { day?: 
             <tbody>{S.traders.map(t => (
               <tr key={t.id} style={{ cursor: "default" }}>
                 <td><Link href={`/admin/trader/${t.id}`} style={{ color: "var(--fg)", fontWeight: 700, textDecoration: "none" }}>{t.name}</Link></td>
-                <td><span className="fine">{t.failed ? "Труп" : PHASE_LABEL[t.phase]}</span></td>
+                <td><span className="fine">{t.failed ? "Failed" : PHASE_LABEL[t.phase]}</span></td>
                 <td className={`n ${cls(t.pnl ?? 0)}`}>{t.pnl == null ? "—" : money(t.pnl, true)}</td>
                 <td className={`n ${cls(t.pnlPct ?? 0)}`}>{t.pnlPct == null ? "—" : `${sg(t.pnlPct)}%`}</td>
                 {!day && <td className="n"><span className="pos">{t.plusDays}</span> / <span className="neg">{t.minusDays}</span></td>}

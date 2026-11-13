@@ -68,7 +68,8 @@ h2{font-family:var(--f-display);font-size:18px;margin:0;font-weight:800;color:va
 .l-yellow{background:var(--amber-bg);color:var(--amber)} .l-yellow .dot{background:var(--amber)}
 .l-green{background:var(--green-bg);color:var(--green)} .l-green .dot{background:var(--green)}
 .l-work{background:rgba(232,181,74,.08);color:var(--gold2)} .l-work .dot{background:var(--gold-dim)}
-.l-failed,.l-none{background:var(--grey-bg);color:var(--muted)} .l-failed .dot,.l-none .dot{background:var(--muted)}
+.l-none{background:var(--grey-bg);color:var(--muted)} .l-none .dot{background:var(--muted)}
+.l-failed{background:var(--red);color:#1a0506} .l-failed .dot{background:#1a0506}
 .st{font-size:12px;font-weight:700;padding:3px 9px;border-radius:5px;white-space:nowrap;border:1px solid var(--line2);color:var(--fg)}
 .st.p1,.st.p2{border-color:var(--gold);color:var(--gold2);background:rgba(232,181,74,.07)}
 .st.funded{border-color:var(--green);color:var(--green)}
@@ -220,3 +221,8 @@ textarea{font:inherit;background:var(--sunk);color:var(--fg);border:1px solid va
 
 .eqtip{position:absolute;pointer-events:none;background:var(--sunk);border:1px solid var(--gold-dim);border-radius:9px;padding:8px 10px;font-size:12px;white-space:nowrap;box-shadow:0 12px 30px rgba(0,0,0,.6);z-index:5}
 .eqtip b{display:block;font-weight:800}
+
+/* Выбывший счёт: строка с красным градиентом слева (по ячейкам — так одинаково во всех браузерах) */
+tr.dead>td{background:rgba(240,86,90,.06)}
+tr.dead>td:first-child{background:linear-gradient(90deg,rgba(240,86,90,.30),rgba(240,86,90,.06));box-shadow:inset 3px 0 0 var(--red)}
+tr.dead:hover>td{background-color:rgba(240,86,90,.10)}

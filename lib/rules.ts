@@ -22,7 +22,7 @@ export function normalizeRules(r: Partial<Rules> | null | undefined): Rules {
 }
 
 export const PHASE_LABEL: Record<number, string> = { 1: "Фаза 1", 2: "Фаза 2", 3: "Funded" };
-export const STATUS_LABEL: Record<string, string> = { active: "Активен", passed: "Пройдено", failed: "Труп" };
+export const STATUS_LABEL: Record<string, string> = { active: "Активен", passed: "Пройдено", failed: "Failed" };
 export const LEVEL_LABEL: Record<string, string> = { green: "Цель близко", work: "В работе", yellow: "Предупреждение", red: "Буксир", failed: "Выбыл", none: "Нет данных" };
 
 export type Zone = "green" | "work" | "yellow" | "red";
