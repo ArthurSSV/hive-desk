@@ -103,7 +103,7 @@ export default function DealsHistory({ deals, login, initial, accountId, tz }: {
         const pick = (tf: string) => { const t = base && typeof base === "object" && "bars" in base && base.period === tf ? "" : tf; setHover(h => (h ? { ...h, tf: t, pinned: true } : h)); load(hover.pos, t); };
         return (
           <div role="dialog" aria-label="График сделки" onMouseEnter={() => clearTimeout(hideT.current)} onMouseLeave={leave}
-            style={{ position: "fixed", zIndex: 30, top: hover.top, left: hover.left, width: "min(640px, calc(100vw - 32px))", padding: 14, borderRadius: 12, background: "var(--surface)", border: "1px solid var(--gold-dim)", boxShadow: "0 18px 50px rgba(0,0,0,.6)" }}>
+            style={{ position: "fixed", zIndex: 30, top: hover.top, left: hover.left, width: "min(640px, calc(100vw - 32px))", padding: 14, borderRadius: 12, background: "var(--surface)", border: "1px solid var(--gold-dim)", boxShadow: "0 18px 50px var(--shadow)" }}>
             <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center", marginBottom: 8, flexWrap: "wrap" }}>
               <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}><b>{d.symbol}</b><span className={`side ${side}`}>{side === "buy" ? "BUY" : "SELL"}</span><span className="mono fine">{d.lots != null ? Number(d.lots).toFixed(2) : "—"} лот · #{d.position_id}</span>
                 <span className="tfs" role="group" aria-label="Таймфрейм">{TFS.map(tf => {

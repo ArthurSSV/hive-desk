@@ -5,6 +5,7 @@ import { userClient } from "@/lib/supabase";
 import { signOut } from "./actions";
 import NotificationBell from "@/components/NotificationBell";
 import TzCookie from "@/components/TzCookie";
+import ThemeToggle from "@/components/ThemeToggle";
 import { cookies } from "next/headers";
 
 export const metadata: Metadata = { title: "Матрёшка — Челлендж", description: "Отчётность группы по проп-челленджу" };
@@ -14,8 +15,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const { data: { user } } = await sb.auth.getUser();
   const { data: profile } = user ? await sb.from("profiles").select("role,name,is_trader").eq("id", user.id).single() : { data: null };
   const admin = profile?.role === "admin";
+  const theme = cookies().get("theme")?.value === "light" ? "light" : "dark";
   return (
-    <html lang="ru">
+    <html lang="ru" data-theme={theme}>
       <head>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=JetBrains+Mono:wght@400;600;700&display=swap" />
@@ -35,9 +37,11 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               {admin && <Link href="/admin/rules">Правила</Link>}
               {(!admin || profile?.is_trader) && <Link href="/dashboard">Мой кабинет</Link>}
               {admin && <NotificationBell />}
+              <ThemeToggle />
               <form action={signOut}><button className="signout" type="submit">Выйти</button></form>
             </nav>
           )}
+          {!user && <span style={{ marginLeft: "auto" }}><ThemeToggle /></span>}
         </div></header>
         <div className="wrap"><main>{children}</main></div>
       </body>

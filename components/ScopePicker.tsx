@@ -23,7 +23,7 @@ export default function ScopePicker({ options, current, people, teams, pick, bas
         {current === "pick" ? `Выборка · ${pick.length}` : "Выбрать вручную…"}
       </button>
       {open && (
-        <div className="panel" role="dialog" aria-label="Выбор трейдеров" style={{ position: "absolute", top: "calc(100% + 8px)", left: 0, zIndex: 20, width: "min(420px, calc(100vw - 32px))", display: "grid", gap: 12, boxShadow: "0 18px 50px rgba(0,0,0,.6)" }}>
+        <div className="panel" role="dialog" aria-label="Выбор трейдеров" style={{ position: "absolute", top: "calc(100% + 8px)", left: 0, zIndex: 20, width: "min(420px, calc(100vw - 32px))", display: "grid", gap: 12, boxShadow: "0 18px 50px var(--shadow)" }}>
           <div className="ph" style={{ margin: 0 }}><h2>Выберите трейдеров</h2><span className="fine">{sel.size} выбрано</span></div>
           <div style={{ maxHeight: 340, overflowY: "auto", display: "grid", gap: 12 }}>
             {groups.map(g => (
