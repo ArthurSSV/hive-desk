@@ -34,7 +34,7 @@ export default async function Admin() {
   const urgent = (t: (typeof T)[number]) => t.flags.some(f => f.lv === "red");
   const alerts = live.filter(t => t.level === "red" || t.level === "yellow" || urgent(t)).sort((a, b) => (W[b.level] || 0) - (W[a.level] || 0) || Number(urgent(b)) - Number(urgent(a)) || a.m.total - b.m.total);
   const lastSync = withAcc.map(t => t.acc!.last_synced_at).filter(Boolean).sort().pop();
-  const dist: [number, string, string][] = [[p1, "var(--muted)", "Фаза 1"], [p2, "var(--hive)", "Фаза 2"], [funded, "var(--green)", "Funded"], [failed, "var(--red)", "Failed"], [noAcc, "var(--line)", "Без счёта"]];
+  const dist: [number, string, string][] = [[p1, "var(--muted)", "Фаза 1"], [p2, "var(--hive)", "Фаза 2"], [funded, "var(--green)", "Funded"], [failed, "var(--red)", "Труп"], [noAcc, "var(--line)", "Без счёта"]];
 
   const rows: Row[] = T.map(t => ({
     id: t.p.id, name: t.p.name, email: t.p.email, isAdmin: t.p.role === "admin", unconfirmed: !!t.acc && !t.acc.balance_locked, team: t.p.team_id ? teamName.get(t.p.team_id) ?? null : null, fresh: t.fresh, level: t.level, phase: t.acc?.phase ?? null, status: t.acc?.status ?? null,
@@ -62,7 +62,7 @@ export default async function Admin() {
         <div><div className="k">Фаза 1</div><div className="v">{p1}</div></div>
         <div><div className="k">Фаза 2</div><div className="v">{p2}</div></div>
         <div><div className="k">Funded</div><div className="v">{funded}</div></div>
-        <div><div className="k">Failed</div><div className="v">{failed} <small>{withAcc.length ? Math.round((failed / withAcc.length) * 100) : 0}%</small></div></div>
+        <div><div className="k">Труп</div><div className="v">{failed} <small>{withAcc.length ? Math.round((failed / withAcc.length) * 100) : 0}%</small></div></div>
         <div><div className="k">Буксир</div><div className="v red">{red}</div><div className="fine">предупр. {yel} · у цели {near}</div></div>
         <div><div className="k">Средняя просадка</div><div className="v">{avgDD.toFixed(1)}<small>%</small></div></div>
       </section>

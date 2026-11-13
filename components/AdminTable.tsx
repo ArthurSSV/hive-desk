@@ -33,7 +33,7 @@ export default function AdminTable({ rows, max, redDD, minDays, teams = [] }: { 
       <div className="ph"><h2>Все трейдеры</h2>
         <div className="tools">
           <input id="q" type="search" placeholder="Поиск по имени или email" value={q} onChange={e => setQ(e.target.value)} aria-label="Поиск" />
-          <select id="fst" value={st} onChange={e => setSt(e.target.value)} aria-label="Статус"><option value="all">Все статусы</option><option value="1">Фаза 1</option><option value="2">Фаза 2</option><option value="3">Funded</option><option value="failed">Failed</option></select>
+          <select id="fst" value={st} onChange={e => setSt(e.target.value)} aria-label="Статус"><option value="all">Все статусы</option><option value="1">Фаза 1</option><option value="2">Фаза 2</option><option value="3">Funded</option><option value="failed">Труп</option></select>
           {teams.length > 0 && <select id="ftm" value={tm} onChange={e => setTm(e.target.value)} aria-label="Команда"><option value="all">Все команды</option>{teams.map(t => <option key={t} value={t}>{t}</option>)}<option value="">Без команды</option></select>}
           <select id="flv" value={lv} onChange={e => setLv(e.target.value)} aria-label="Светофор"><option value="all">Любой светофор</option>{LV.map(k => <option key={k} value={k}>{LEVEL_LABEL[k]}</option>)}</select>
         </div></div>
@@ -50,7 +50,7 @@ export default function AdminTable({ rows, max, redDD, minDays, teams = [] }: { 
               <td><span className={`pill l-${r.level}`}><span className="dot" />{LEVEL_LABEL[r.level]}</span></td>
               <td className="who"><b>{r.name || "Без имени"}{r.fresh && <> <span className="st p2">новый</span></>}{r.isAdmin && <> <span className="st">админ</span></>}</b><span>{r.team ? `${r.team} · ` : ""}{r.email}</span></td>
               <td className="n">{r.size ? "$" + Math.round(r.size).toLocaleString("en-US") : "—"}{r.unconfirmed && <span title="Баланс не подтверждён админом" style={{ color: "var(--amber)", marginLeft: 4 }}>⚠</span>}</td>
-              <td>{noAcc ? <span className="fine">нет счёта</span> : <span className={`st ${r.status === "failed" ? "failed" : r.phase === 3 ? "funded" : r.phase === 2 ? "p2" : "p1"}`}>{r.status === "failed" ? "Failed" : PHASE_LABEL[r.phase!]}{r.status === "passed" ? " ✓" : ""}</span>}</td>
+              <td>{noAcc ? <span className="fine">нет счёта</span> : <span className={`st ${r.status === "failed" ? "failed" : r.phase === 3 ? "funded" : r.phase === 2 ? "p2" : "p1"}`}>{r.status === "failed" ? "Труп" : PHASE_LABEL[r.phase!]}{r.status === "passed" ? " ✓" : ""}</span>}</td>
               <td className={`n ${cls(r.total)}`}>{noAcc ? "—" : <>{sg(r.total)}%{r.target ? <span className="mini"><i style={{ width: `${prog}%`, background: "var(--hive)" }} /></span> : null}</>}</td>
               <td className={`n ${cls(r.today)}`}>{noAcc || r.status === "failed" ? "—" : `${sg(r.today)}%`}</td>
               <td className="n">{noAcc ? "—" : <>{r.maxDD.toFixed(1)}%<span className="mini"><i style={{ width: `${Math.min(100, (r.maxDD / max) * 100)}%`, background: ddCol }} /></span></>}</td>

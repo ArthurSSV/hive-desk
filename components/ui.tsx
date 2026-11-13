@@ -12,7 +12,7 @@ export function Pill({ level }: { level: string }) {
 }
 
 export function PhaseTag({ phase, status }: { phase: number; status: string }) {
-  if (status === "failed") return <span className="st failed">Failed</span>;
+  if (status === "failed") return <span className="st failed">Труп</span>;
   const c = phase === 3 ? "funded" : phase === 2 ? "p2" : "p1";
   return <span className={`st ${c}`}>{PHASE_LABEL[phase]}{status === "passed" ? " ✓" : ""}</span>;
 }

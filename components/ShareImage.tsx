@@ -111,7 +111,7 @@ export async function drawCard(d: CardData): Promise<HTMLCanvasElement> {
   // подвал
   ctx.strokeStyle = C.line; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(80, 974); ctx.lineTo(1000, 974); ctx.stroke();
   if (d.best) { const w = txt(ctx, "Лучший результат: ", 80, 1020, `600 19px ${SANS}`, C.muted); txt(ctx, d.best, 80 + w, 1020, `700 19px ${MONO}`, C.green); }
-  const tail = [["Фаза 2", d.phases.p2], ["Funded", d.phases.funded], ["Failed", d.phases.failed]] as const;
+  const tail = [["Фаза 2", d.phases.p2], ["Funded", d.phases.funded], ["Труп", d.phases.failed]] as const;
   let fx = 1000;
   [...tail].reverse().forEach(([l, n], i) => {
     fx -= txt(ctx, String(n), fx, 1020, `700 19px ${SANS}`, C.fg, "right") + 8;
