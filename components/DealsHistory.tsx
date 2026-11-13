@@ -47,6 +47,21 @@ export default function DealsHistory({ deals, login, initial, accountId, tz }: {
       return { d, o, side, pct: initial ? (Number(d.net_profit) / initial) * 100 : 0 };
     }).filter(r => !q || String(r.d.position_id).includes(q) || String(r.d.deal_id).includes(q) || (r.d.symbol || "").toLowerCase().includes(q.toLowerCase()));
   }, [deals, initial, q]);
+  // Позиция, закрытая частями: метка каждой части по порядку закрытия (TP1, TP2…; убыточная часть — SL) и итог по позиции
+  const parts = useMemo(() => {
+    const by = new Map<number, D[]>();
+    for (const d of deals) if (d.is_close && d.position_id != null) { if (!by.has(d.position_id)) by.set(d.position_id, []); by.get(d.position_id)!.push(d); }
+    const label = new Map<number, { t: string; sl: boolean }>(), total = new Map<number, { n: number; lots: number; pnl: number }>();
+    for (const [pos, list] of by) {
+      if (list.length < 2) continue;
+      list.sort((a, b) => a.exec_ts.localeCompare(b.exec_ts));
+      let tp = 0;
+      for (const d of list) label.set(d.deal_id, Number(d.net_profit) < 0 ? { t: "SL", sl: true } : { t: `TP${++tp}`, sl: false });
+      total.set(pos, { n: list.length, lots: list.reduce((a, d) => a + Number(d.lots || 0), 0), pnl: list.reduce((a, d) => a + Number(d.net_profit), 0) });
+    }
+    return { label, total };
+  }, [deals]);
+  const hot = hover ? parts.total.get(hover.pos) : undefined;
   const pages = Math.max(1, Math.ceil(rows.length / PAGE));
   const view = rows.slice(page * PAGE, page * PAGE + PAGE);
 
@@ -54,14 +69,19 @@ export default function DealsHistory({ deals, login, initial, accountId, tz }: {
     <section className="panel">
       <div className="ph"><h2>История сделок</h2>
         <div className="tools"><input id="dq" type="search" placeholder="Позиция, сделка или символ" value={q} onChange={e => { setQ(e.target.value); setPage(0); }} aria-label="Поиск сделки" /></div></div>
+      {parts.total.size > 0 && (
+        <div className={`posinfo${hot ? " on" : ""}`} aria-live="polite">{hot
+          ? <>Позиция <b className="mono">{hover!.pos}</b> · закрыта в {hot.n} {hot.n < 5 ? "части" : "частей"} · общий лот <b className="mono">{hot.lots.toFixed(2)}</b> · итог <b className={`mono ${hot.pnl >= 0 ? "pos" : "neg"}`}>{hot.pnl < 0 ? "-" : "+"}${Math.abs(hot.pnl).toFixed(2)}</b>{initial ? <span className="fine"> ({((hot.pnl / initial) * 100).toFixed(2)}%)</span> : null}</>
+          : "Позиции, закрытые частями, отмечены чертой слева: наведите на строку, чтобы увидеть все части и итог"}</div>)}
       <div className="tablewrap"><table>
         <thead><tr><th>Счёт</th><th>Позиция</th><th>Открыта</th><th>Символ</th><th>Сторона</th><th className="n">Лот</th><th className="n">Цена входа</th><th className="n">Цена выхода</th><th>Закрыта</th><th className="n">Прибыль</th><th className="n">Прибыль %</th></tr></thead>
         <tbody>{view.map(({ d, o, side, pct }) => (
-          <tr key={d.deal_id} style={{ cursor: "pointer", background: hover?.key === d.deal_id ? "rgba(232,181,74,.06)" : undefined }}
+          <tr key={d.deal_id} className={[parts.label.has(d.deal_id) ? "multi" : "", hot && d.position_id === hover!.pos ? "hl" : ""].join(" ").trim() || undefined}
+            style={{ cursor: "pointer", background: hover?.key === d.deal_id ? "rgba(232,181,74,.06)" : undefined }}
             onMouseEnter={e => !hover?.pinned && show(e, d.deal_id, d.position_id, false)} onMouseLeave={leave}
             onClick={e => show(e, d.deal_id, d.position_id, true)} title="Наведите или нажмите, чтобы открыть график">
             <td className="mono">{login}</td>
-            <td className="mono">{d.position_id ?? "—"}</td>
+            <td className="mono">{d.position_id ?? "—"}{parts.label.has(d.deal_id) && <span className={`part${parts.label.get(d.deal_id)!.sl ? " sl" : ""}`}>{parts.label.get(d.deal_id)!.t}</span>}</td>
             <td className="mono">{o ? dt(o.exec_ts) : "—"}</td>
             <td><b>{d.symbol || "—"}</b></td>
             <td><span className={`side ${side}`}>{side === "buy" ? "BUY" : "SELL"}</span></td>
