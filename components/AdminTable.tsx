@@ -33,7 +33,7 @@ export default function AdminTable({ rows, max, redDD, minDays, teams = [] }: { 
       <div className="ph"><h2>Все трейдеры</h2>
         <div className="tools">
           <input id="q" type="search" placeholder="Поиск по имени или email" value={q} onChange={e => setQ(e.target.value)} aria-label="Поиск" />
-          <select id="fst" value={st} onChange={e => setSt(e.target.value)} aria-label="Статус"><option value="all">Все статусы</option><option value="1">Фаза 1</option><option value="2">Фаза 2</option><option value="3">Funded</option><option value="failed">Failed</option></select>
+          <select id="fst" value={st} onChange={e => setSt(e.target.value)} aria-label="Статус"><option value="all">Все статусы</option><option value="1">Фаза 1</option><option value="2">Фаза 2</option><option value="3">Funded</option><option value="failed">Дохлик</option></select>
           {teams.length > 0 && <select id="ftm" value={tm} onChange={e => setTm(e.target.value)} aria-label="Команда"><option value="all">Все команды</option>{teams.map(t => <option key={t} value={t}>{t}</option>)}<option value="">Без команды</option></select>}
           <select id="flv" value={lv} onChange={e => setLv(e.target.value)} aria-label="Светофор"><option value="all">Любой светофор</option>{LV.map(k => <option key={k} value={k}>{LEVEL_LABEL[k]}</option>)}</select>
         </div></div>

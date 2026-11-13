@@ -142,7 +142,7 @@ export default async function Summary({ searchParams }: { searchParams: { day?: 
             <tbody>{S.traders.map(t => (
               <tr key={t.id} style={{ cursor: "default" }}>
                 <td><Link href={`/admin/trader/${t.id}`} style={{ color: "var(--fg)", fontWeight: 700, textDecoration: "none" }}>{t.name}</Link></td>
-                <td><span className="fine">{t.failed ? "Failed" : PHASE_LABEL[t.phase]}</span></td>
+                <td><span className="fine">{t.failed ? "Дохлик" : PHASE_LABEL[t.phase]}</span></td>
                 <td className={`n ${cls(t.pnl ?? 0)}`}>{t.pnl == null ? "—" : money(t.pnl, true)}</td>
                 <td className={`n ${cls(t.pnlPct ?? 0)}`}>{t.pnlPct == null ? "—" : `${sg(t.pnlPct)}%`}</td>
                 {!day && <td className="n"><span className="pos">{t.plusDays}</span> / <span className="neg">{t.minusDays}</span></td>}
