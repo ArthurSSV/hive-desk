@@ -45,7 +45,7 @@ export default async function Summary({ searchParams }: { searchParams: { day?: 
     !day ? `Торговых дней: ${sum.tradingDays} · сделок: ${sum.trades}` : `Сделок: ${sum.trades}`,
     sum.bestDay && sum.worstDay ? `Лучший день группы: ${fmtD(sum.bestDay.day)} ${money(sum.bestDay.pnl, true)} · худший: ${fmtD(sum.worstDay.day)} ${money(sum.worstDay.pnl, true)}` : null,
     `Итог группы: ${money(sum.cum, true)} (${sg(sum.cumPct)}%)`,
-    `Зоны: 🟢 ${S.zones.green} · ⚪ ${S.zones.work} · 🟡 ${S.zones.yellow} · 🔴 ${S.zones.red}`,
+    `Зоны: 🟢 ${S.zones.green} · ⚪ ${S.zones.work} · 🟡 ${S.zones.yellow} · 🔴 ${S.zones.red}${S.zones.failed ? ` · ⛔ ${S.zones.failed}` : ""}`,
     `Фаза 1: ${S.phases.p1} · Фаза 2: ${S.phases.p2} · Funded: ${S.phases.funded} · Failed: ${S.phases.failed}`,
     best ? `Лучший результат: ${best.name} ${sg(best.pnlPct!)}%` : null,
     worst ? `Слабее всех: ${worst.name} ${sg(worst.pnlPct!)}%` : null,
@@ -100,7 +100,7 @@ export default async function Summary({ searchParams }: { searchParams: { day?: 
         <div><div className="k">{day ? "За день" : `Результат ${FOR[P]}`}</div><div className={`v ${cls(sum.pnl)}`}>{money(sum.pnl, true)}</div><div className={`fine ${cls(sum.pct)}`}>{sg(sum.pct)}%</div></div>
         <div><div className="k">Плюс / минус</div><div className="v"><span className="pos">{sum.plus}</span> / <span className="neg">{sum.minus}</span></div><div className="fine">трейдеров {FOR[P]} · без сделок {sum.flat}</div></div>
         <div><div className="k">Сделок</div><div className="v">{sum.trades}</div><div className="fine">{day ? "за день" : `${sum.tradingDays} торг. дн. · ${(sum.trades / Math.max(1, sum.tradingDays)).toFixed(1)} в день`}</div></div>
-        <div><div className="k">Зоны</div><div className="v" style={{ fontSize: 20 }}><span className="pos">{S.zones.green}</span> · <span style={{ color: "var(--gold2)" }}>{S.zones.work}</span> · <span style={{ color: "var(--amber)" }}>{S.zones.yellow}</span> · <span className="neg">{S.zones.red}</span></div><div className="fine">цель · работа · предупр. · буксир</div></div>
+        <div><div className="k">Зоны</div><div className="v" style={{ fontSize: 20 }}><span className="pos">{S.zones.green}</span> · <span style={{ color: "var(--gold2)" }}>{S.zones.work}</span> · <span style={{ color: "var(--amber)" }}>{S.zones.yellow}</span> · <span className="neg">{S.zones.red}</span>{S.zones.failed ? <> · <span className="pill l-failed" style={{ fontSize: 16, padding: "0 7px", verticalAlign: "2px" }}>{S.zones.failed}</span></> : null}</div><div className="fine">цель · работа · предупр. · буксир{S.zones.failed ? " · failed" : ""}</div></div>
       </section>
 
       {sum.bestDay && sum.worstDay && (
@@ -124,7 +124,7 @@ export default async function Summary({ searchParams }: { searchParams: { day?: 
                 <td className={`n ${cls(c.pct)}`}><b>{sg(c.pct)}%</b><span className="mini"><i style={{ width: `${Math.min(100, Math.abs(c.pct) / Math.max(0.01, ...S.compare.map(x => Math.abs(x.pct))) * 100)}%`, background: c.pct >= 0 ? "var(--green)" : "var(--red)" }} /></span></td>
                 <td className={`n ${cls(c.cumPct)}`}>{sg(c.cumPct)}%</td>
                 <td className="n"><span className="pos">{c.plus}</span> / <span className="neg">{c.minus}</span></td>
-                <td className="mono"><span className="pos">{c.zones.green}</span> · <span style={{ color: "var(--gold2)" }}>{c.zones.work}</span> · <span style={{ color: "var(--amber)" }}>{c.zones.yellow}</span> · <span className="neg">{c.zones.red}</span></td>
+                <td className="mono"><span className="pos">{c.zones.green}</span> · <span style={{ color: "var(--gold2)" }}>{c.zones.work}</span> · <span style={{ color: "var(--amber)" }}>{c.zones.yellow}</span> · <span className="neg">{c.zones.red}</span>{c.zones.failed ? <> · <span className="pill l-failed" style={{ padding: "0 6px" }}>{c.zones.failed}</span></> : null}</td>
               </tr>))}</tbody>
           </table></div>
         </section>)}
@@ -140,7 +140,7 @@ export default async function Summary({ searchParams }: { searchParams: { day?: 
           <div className="tablewrap"><table className="daytbl">
             <thead><tr><th>Трейдер</th><th>Этап</th><th className="n">Итог</th><th className="n">%</th>{!day && <th className="n">Дни + / −</th>}<th className="n">Итог фазы</th><th className="n">Сделки</th><th>Зона</th></tr></thead>
             <tbody>{S.traders.map(t => (
-              <tr key={t.id} style={{ cursor: "default" }}>
+              <tr key={t.id} className={t.failed ? "dead" : undefined} style={{ cursor: "default" }}>
                 <td><Link href={`/admin/trader/${t.id}`} style={{ color: "var(--fg)", fontWeight: 700, textDecoration: "none" }}>{t.name}</Link></td>
                 <td><span className="fine">{t.failed ? "Дохлик" : PHASE_LABEL[t.phase]}</span></td>
                 <td className={`n ${cls(t.pnl ?? 0)}`}>{t.pnl == null ? "—" : money(t.pnl, true)}</td>

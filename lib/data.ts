@@ -195,7 +195,8 @@ function aggregate(members: Member[], rowsByAcc: Map<number, any[]>, rules: Retu
     const endRow = all.filter(r => r.day <= end).pop();
     const pnl = own.reduce((a, r) => a + Number(r.pnl), 0);
     const size = Number(acc.initial_balance);
-    const failedBy = acc.status === "failed" && all.some(r => r.breach && r.day <= end);
+    // Выбыл к концу периода: по нарушению лимита в наших расчётах или по сигналу cTrader (проп отключил торговлю)
+    const failedBy = acc.status === "failed" && (all.some(r => r.breach && r.day <= end) || !(acc as any).status_day || String((acc as any).status_day) <= end);
     return {
       id: p.id as string, name: p.name as string, team: p.team_id as number | null, phase: acc.phase, failed: failedBy, size,
       pnl: own.length ? pnl : null, pnlPct: own.length ? (pnl / size) * 100 : null,
@@ -206,7 +207,7 @@ function aggregate(members: Member[], rowsByAcc: Map<number, any[]>, rules: Retu
   }).sort((a, b) => (b.pnlPct ?? -1e12) - (a.pnlPct ?? -1e12));
 
   const pnl = inP.reduce((a, d) => a + d.pnl, 0);
-  const zones = { green: 0, work: 0, yellow: 0, red: 0 } as Record<string, number>;
+  const zones = { green: 0, work: 0, yellow: 0, red: 0, failed: 0 } as Record<string, number>;
   for (const t of traders) if (t.zone in zones) zones[t.zone]++;
   const phases = { p1: 0, p2: 0, funded: 0, failed: 0 };
   for (const t of traders) { if (t.failed) phases.failed++; else if (t.phase === 1) phases.p1++; else if (t.phase === 2) phases.p2++; else phases.funded++; }
