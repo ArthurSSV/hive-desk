@@ -6,7 +6,7 @@ export type Account = {
   id: number; user_id: string; ctid_trader_account_id: number; trader_login: number | null; broker_name: string | null;
   is_live: boolean; phase: number; initial_balance: number | null; balance: number | null; status: string; active: boolean;
   last_synced_at: string | null; sync_error: string | null; created_at: string; balance_locked?: boolean;
-  removed?: boolean; delete_requested_at?: string | null;
+  removed?: boolean; delete_requested_at?: string | null; access_rights?: string | null;
 };
 
 /** Supabase отдаёт не больше 1000 строк за запрос — забираем страницами. */

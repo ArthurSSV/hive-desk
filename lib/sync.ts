@@ -1,6 +1,6 @@
 // Синхронизация: cTrader → deals → daily_stats → статус счёта → Telegram.
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { CTraderConnection, mapDeal, refreshToken } from "./ctrader";
+import { CTraderConnection, mapDeal, refreshToken, accessOf } from "./ctrader";
 import { computeAccount, dayKey } from "./engine";
 import { buildPositions, chartWindow, minEquityByDay, type RawDeal } from "./equity";
 import { normalizeRules, PHASE_LABEL, type Rules } from "./rules";
@@ -8,7 +8,7 @@ import { sendTelegram } from "./telegram";
 
 type Account = {
   id: number; user_id: string; ctid_trader_account_id: number; is_live: boolean; phase: number;
-  initial_balance: number | null; status: string; created_at: string;
+  initial_balance: number | null; status: string; created_at: string; access_rights?: string | null;
 };
 
 const HISTORY_DAYS = 120;
@@ -89,7 +89,12 @@ async function pullDeals(sb: SupabaseClient, acc: Account) {
       const sum = (all || []).reduce((a, d) => a + Number(d.net_profit), 0);
       initial = Math.round((balance - sum) * 100) / 100;
     }
-    await sb.from("ctrader_accounts").update({ balance, initial_balance: initial, last_synced_at: new Date().toISOString(), sync_error: null }).eq("id", acc.id);
+    const access = accessOf(trader.accessRights);
+    acc.access_rights = access;
+    const upd = { balance, initial_balance: initial, last_synced_at: new Date().toISOString(), sync_error: null };
+    // Колонка access_rights появляется после миграции 010 — без неё синхронизация работает как раньше
+    const { error: e1 } = await sb.from("ctrader_accounts").update({ ...upd, access_rights: access }).eq("id", acc.id);
+    if (e1) await sb.from("ctrader_accounts").update(upd).eq("id", acc.id);
     return { initial };
   } finally { c.close(); }
 }
@@ -142,6 +147,15 @@ export async function recompute(sb: SupabaseClient, acc: Account, rules: Rules, 
     day_loss_pct: d.day_loss_pct, dd_pct: d.dd_pct, min_equity: minEquity.get(d.day) ?? null,
   }));
   for (let i = 0; i < rows.length; i += 500) { const { error } = await sb.from("daily_stats").insert(rows.slice(i, i + 500)); if (error) throw error; }
+  // Сигнал от самого cTrader: проп отключил торговлю. По нашим расчётам счёт ещё «жив»
+  // (минутные свечи могли не поймать касание лимита) — доверяем брокеру.
+  const access = acc.access_rights || "full", lastDay = res.days[res.days.length - 1];
+  if (res.status === "active" && access !== "full" && lastDay) {
+    const target = acc.phase === 1 ? rules.p1 : acc.phase === 2 ? rules.p2 : null;
+    const lastTraded = [...res.days].reverse().find(d => d.traded)?.day ?? lastDay.day;
+    if (target != null && lastDay.total_pct >= target) { res.status = "passed"; res.statusDay = lastTraded; }
+    else if (lastDay.total_pct < 0) { res.status = "failed"; res.statusDay = lastTraded; }
+  }
   await sb.from("ctrader_accounts").update({ status: res.status, status_day: res.statusDay }).eq("id", acc.id);
   return { res, today, wasStatus: acc.status };
 }

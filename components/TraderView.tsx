@@ -5,6 +5,7 @@ import { saveJournal, syncMe } from "@/app/actions";
 import { Gauge, PhaseTag, Pill, cls, fmtD, sg, usd } from "./ui";
 import DealsHistory from "./DealsHistory";
 import EquityCurve from "./EquityCurve";
+import { ACCESS_LABEL } from "@/lib/access";
 import { viewerTz, tzLabel } from "@/lib/tz";
 
 type B = Awaited<ReturnType<typeof traderBundle>>;
@@ -32,11 +33,12 @@ export default function TraderView({ b, mode, journalDay, journalSaved, journalE
   const floor = init * (1 - R.max / 100), lowEq = m.lowestEq ?? init;
   const shortDay = (d: string) => new Date(d + "T12:00:00Z").toLocaleDateString("ru-RU", { day: "numeric", month: "short", timeZone: "UTC" });
   const lowAt = m.lowestEq != null && m.lowestEq < init ? (m.lowestEqAt ? shortDay(m.lowestEqAt) : null) : acc.created_at ? "старт " + shortDay(String(acc.created_at).slice(0, 10)) : null;
+  const access = acc.access_rights || "full";
   const vtz = viewerTz(), resetAt = nextDayStart(R.tz);
   const reset = resetAt.toLocaleString("ru-RU", { timeZone: vtz, hour: "2-digit", minute: "2-digit" }) + " " + tzLabel(vtz, resetAt);
   const worstAt = m.worstDayLossAt ? new Date(m.worstDayLossAt + "T12:00:00Z").toLocaleDateString("ru-RU", { day: "numeric", month: "short", timeZone: "UTC" }) : null;
   const warns: { lv: string; t: string }[] = [];
-  if (failed) warns.push({ lv: "failed", t: "Счёт закрыт по нарушению лимита." });
+  if (failed) warns.push({ lv: "failed", t: access !== "full" ? "Счёт закрыт: проп отключил торговлю в cTrader." : "Счёт закрыт по нарушению лимита." });
   else if (acc.status === "passed") warns.push({ lv: "green", t: "Цель фазы выполнена. Когда получите новый счёт, подключите его на странице подключения." });
   else {
     if (leftDaily <= 2) warns.push({ lv: "red", t: `До дневного лимита осталось ${leftDaily.toFixed(1)}%. Лучше закончить день.` });
@@ -56,7 +58,7 @@ export default function TraderView({ b, mode, journalDay, journalSaved, journalE
     <>
       <div className="head">
         <div><div className="titlerow"><h1>{profile?.name}</h1><Pill level={level} /><PhaseTag phase={acc.phase} status={acc.status} /></div>
-          <p className="sub">Счёт #{acc.trader_login || acc.ctid_trader_account_id} · {acc.broker_name || "cTrader"} · баланс {usd(acc.balance)} · старт фазы {usd(acc.initial_balance)}{self ? " · эти данные видите только вы и админ" : ` · ${profile?.email}`}</p></div>
+          <p className="sub">Счёт #{acc.trader_login || acc.ctid_trader_account_id} · {acc.broker_name || "cTrader"} · баланс {usd(acc.balance)} · старт фазы {usd(acc.initial_balance)}{access !== "full" ? <> · <span className="neg">cTrader: {ACCESS_LABEL[access]}</span></> : !self && acc.access_rights ? " · cTrader: торговля разрешена" : null}{self ? " · эти данные видите только вы и админ" : ` · ${profile?.email}`}</p></div>
         <form action={syncMe}><span className="fine">{acc.last_synced_at ? `Обновлено ${new Date(acc.last_synced_at).toLocaleString("ru-RU", { timeZone: vtz, hour: "2-digit", minute: "2-digit", day: "2-digit", month: "2-digit" })}` : "Ещё не синхронизирован"} </span>{self && <button className="btn ghost" type="submit">Обновить</button>}</form>
       </div>
       {acc.sync_error && <div className="w l-yellow notice">Последняя синхронизация не удалась: {acc.sync_error}</div>}

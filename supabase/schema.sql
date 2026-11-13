@@ -444,3 +444,4 @@ begin
   end if;
   return new;
 end $$;
+alter table public.ctrader_accounts add column if not exists access_rights text;

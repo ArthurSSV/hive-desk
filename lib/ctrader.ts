@@ -100,7 +100,7 @@ export class CTraderConnection {
   accountAuth(ctid: number, accessToken: string) {
     return this.request(PT.ACCOUNT_AUTH_REQ, { ctidTraderAccountId: ctid, accessToken }, PT.ACCOUNT_AUTH_RES);
   }
-  async trader(ctid: number): Promise<{ balance: number; moneyDigits?: number; brokerName?: string; traderLogin?: number }> {
+  async trader(ctid: number): Promise<{ balance: number; moneyDigits?: number; brokerName?: string; traderLogin?: number; accessRights?: number | string }> {
     const r = await this.request(PT.TRADER_REQ, { ctidTraderAccountId: ctid }, PT.TRADER_RES);
     return r.trader;
   }
@@ -183,3 +183,5 @@ export function mapDeal(d: any, traderMoneyDigits: number) {
     status: d.dealStatus,
   };
 }
+
+export { accessOf, ACCESS_LABEL, type Access } from "./access";
