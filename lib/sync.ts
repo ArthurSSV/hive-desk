@@ -113,7 +113,8 @@ async function pullMeta(sb: SupabaseClient, c: CTraderConnection, acc: Account, 
   if (error) return; // миграция 012 ещё не выполнена
   const { count } = await sb.from("deals").select("deal_id", { count: "exact", head: true }).eq("account_id", acc.id);
   // Всю историю счёта берём в первый раз и один раз после миграции 013, дальше — только свежие ордера
-  const full = !(have || []).length || (v13 && !(have || []).some((h: any) => h.exits != null));
+  // v:2 — выходы, размеченные по уровням стопа и тейка из закрывающего ордера; старую разметку пересчитываем один раз
+  const full = !(have || []).length || (v13 && !(have || []).some((h: any) => Array.isArray(h.exits) && h.exits.some((e: any) => e.v === 2)));
   const since = full && count ? Date.now() - HISTORY_DAYS * 86400_000 : fromMs;
   const meta = new Map<number, any>((have || []).map((h: any) => [Number(h.position_id), { ...h }]));
   const touch = new Set<number>();
@@ -141,18 +142,19 @@ async function pullMeta(sb: SupabaseClient, c: CTraderConnection, acc: Account, 
     list.sort((x, y) => Number(x.utcLastUpdateTimestamp || 0) - Number(y.utcLastUpdateTimestamp || 0));
     const exits = list.map(o => {
       const t = typeOf(o.orderType), price = o.executionPrice != null ? Number(o.executionPrice) : null;
+      // В закрывающем ордере стоп/тейк cTrader отдаёт ОБА уровня: stopPrice (или stopLoss) — стоп, limitPrice (или takeProfit) — тейк.
+      // Что сработало — смотрим, к какому уровню ближе цена исполнения.
+      const slLvl = o.stopPrice ?? o.stopLoss ?? null, tpLvl = o.limitPrice ?? o.takeProfit ?? null;
       let kind = "manual";
       if (o.isStopOut) kind = "stopout";
       else if (t === "LIMIT") kind = "tp";                       // частичный тейк лимитным ордером
       else if (t === "STOP_LOSS_TAKE_PROFIT") {
-        // У сработавшего тейка цена — limitPrice/takeProfit, у стопа — stopPrice/stopLoss; иначе сравниваем с известными уровнями
-        if (o.limitPrice != null || (o.takeProfit != null && o.stopLoss == null)) kind = "tp";
-        else if (o.stopPrice != null || o.stopLoss != null) kind = "sl";
-        else if (price != null && m.tp != null && m.sl != null) kind = Math.abs(price - Number(m.tp)) < Math.abs(price - Number(m.sl)) ? "tp" : "sl";
-        else kind = "sl";
+        if (price != null && slLvl != null && tpLvl != null) kind = Math.abs(price - Number(tpLvl)) < Math.abs(price - Number(slLvl)) ? "tp" : "sl";
+        else kind = tpLvl != null && slLvl == null ? "tp" : "sl";
       }
-      if (kind === "tp" && price != null && m.tp == null) m.tp = Number(o.limitPrice ?? o.takeProfit ?? price);
-      return { ts: Number(o.utcLastUpdateTimestamp || 0), price, kind };
+      // Тейк, поставленный после входа, есть в закрывающем ордере — это и есть последний тейк позиции
+      if (tpLvl != null) m.tp = Number(tpLvl);
+      return { ts: Number(o.utcLastUpdateTimestamp || 0), price, kind, sl: slLvl != null ? Number(slLvl) : null, tp: tpLvl != null ? Number(tpLvl) : null, v: 2 };
     });
     m.exits = exits;
     m.close_reason = exits.some(e => e.kind === "stopout") ? "stopout" : exits.some(e => e.kind === "tp" || e.kind === "sl") ? "sltp" : "manual";

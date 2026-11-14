@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 
 type Deal = { position_id: number | null; exec_ts: string; net_profit: number; is_close: boolean; side?: string; lots?: number | null; volume?: number | null; price?: number | null; entry_price?: number | null; conv?: number | null };
-type Meta = { position_id: number; sl: number | null; tp: number | null; close_reason: string | null; exits?: { ts: number; price: number | null; kind: string }[] | null };
+type Meta = { position_id: number; sl: number | null; tp: number | null; close_reason: string | null; exits?: { ts: number; price: number | null; kind: string; sl?: number | null; tp?: number | null }[] | null };
 // Группы планового RR; группы риска подбираются под трейдера автоматически
 const MIN_N = 5; // меньше — «мало данных»
 /** Границы групп риска по распределению сделок трейдера: 3 группы примерно поровну, шаг 0.05%. */
@@ -68,7 +68,12 @@ export default function Analytics({ deals, initial, tz, meta = [] }: { deals: De
     const mm = new Map(meta.map(m => [Number(m.position_id), m]));
     const withMeta = trades.filter(t => mm.has(t.id));
     const rr = withMeta.map(t => {
-      const m = mm.get(t.id)!, sl = m.sl != null ? Number(m.sl) : null, tp = m.tp != null ? Number(m.tp) : null;
+      const m = mm.get(t.id)!, tp = m.tp != null ? Number(m.tp) : null;
+      // Стоп из ордера на вход — первоначальный. Если его не было (поставили после входа), берём стоп из первого закрывающего ордера,
+      // но только если он ещё на стороне убытка — перенесённый в плюс стоп риском не считается.
+      const closeSl = (m.exits || []).map(e => e.sl).find(v => v != null);
+      const lossSide = (v: number) => t.entry != null && (t.buy ? v < t.entry : v > t.entry);
+      const sl = m.sl != null ? Number(m.sl) : closeSl != null && lossSide(Number(closeSl)) ? Number(closeSl) : null;
       const dist = sl != null && t.entry != null ? Math.abs(t.entry - sl) : null;
       const riskUsd = dist && t.vol && t.conv ? dist * (t.vol / 100) * t.conv : null;
       const risk = riskUsd && initial ? (riskUsd / initial) * 100 : null;
