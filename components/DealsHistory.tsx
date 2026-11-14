@@ -31,7 +31,7 @@ export default function DealsHistory({ deals, login, initial, accountId, tz }: {
   function show(e: React.MouseEvent<HTMLTableRowElement>, key: number, pos: number | null, pinned: boolean) {
     if (pos == null) return;
     clearTimeout(hideT.current);
-    const r = e.currentTarget.getBoundingClientRect(), w = Math.min(660, innerWidth - 32), h = 420;
+    const r = e.currentTarget.getBoundingClientRect(), w = Math.min(660, innerWidth - 32), n = pos != null ? parts.total.get(pos)?.n ?? 0 : 0, h = 370 + (n ? 44 + (n + 1) * 21 : 0);
     const left = Math.max(16, Math.min(e.clientX - w / 2, innerWidth - w - 16));
     const top = r.bottom + h + 8 < innerHeight ? r.bottom + 6 : Math.max(8, r.top - h - 6);
     setHover(cur => (pinned && cur?.pinned && cur.key === key ? null : cur?.key === key ? { ...cur, pinned: pinned || cur.pinned } : { key, pos, top, left, pinned, tf: "" }));
@@ -119,11 +119,16 @@ export default function DealsHistory({ deals, login, initial, accountId, tz }: {
               : c === "none" ? <p className="fine" style={{ height: 80, display: "grid", placeItems: "center", margin: 0 }}>График появится после следующей синхронизации (до 15 минут).</p>
               : "err" in c ? <p className="fine" style={{ height: 80, display: "grid", placeItems: "center", margin: 0, color: "var(--red)" }}>{c.err}</p>
               : <TradeChart data={c} openMs={openMs} entry={d.entry_price ?? o?.price ?? null} side={side} exits={exits} />}
-            <div className="fine" style={{ display: "flex", justifyContent: "space-between", gap: 8, marginTop: 6, flexWrap: "wrap" }}>
-              <span>Вход {o ? dt(o.exec_ts) : "—"} по {px(d.entry_price ?? o?.price ?? null)}</span>
-              {grp ? list.map(p => { const lb = parts.label.get(p.deal_id), w = Number(p.net_profit) >= 0; return (
-                <span key={p.deal_id}><b className={w ? "pos" : "neg"}>{lb?.t}</b> {dt(p.exec_ts).slice(-5)} по {px(p.price)} · {Number(p.lots || 0).toFixed(2)} лот · <span className={`mono ${w ? "pos" : "neg"}`}>{w ? "" : "-"}${Math.abs(Number(p.net_profit)).toFixed(2)}</span></span>); })
-                : <span>Выход {dt(d.exec_ts)} по {px(d.price)}</span>}</div>
+            {grp ? (
+              <div className="legs" role="table" aria-label="Части позиции">
+                <div role="row"><b>Вход</b><span>{o ? dt(o.exec_ts) : "—"}</span><span className="mono">{px(d.entry_price ?? o?.price ?? null)}</span><span className="mono">{grp.lots.toFixed(2)} лот</span><span /></div>
+                {list.map(p => { const lb = parts.label.get(p.deal_id), w = Number(p.net_profit) >= 0; return (
+                  <div role="row" key={p.deal_id} className={p.deal_id === d.deal_id ? "cur" : undefined}><b className={w ? "pos" : "neg"}>{lb?.t}</b><span>{dt(p.exec_ts)}</span><span className="mono">{px(p.price)}</span><span className="mono">{Number(p.lots || 0).toFixed(2)} лот</span>
+                    <span className={`mono ${w ? "pos" : "neg"}`}>{w ? "+" : "-"}${Math.abs(Number(p.net_profit)).toFixed(2)}</span></div>); })}
+              </div>
+            ) : (
+              <div className="fine" style={{ display: "flex", justifyContent: "space-between", gap: 8, marginTop: 6, flexWrap: "wrap" }}>
+                <span>Вход {o ? dt(o.exec_ts) : "—"} по {px(d.entry_price ?? o?.price ?? null)}</span><span>Выход {dt(d.exec_ts)} по {px(d.price)}</span></div>)}
           </div>);
       })()}
       {rows.length > PAGE && (

@@ -275,3 +275,11 @@ tbody.blocks tr.hl>td:nth-child(2){background:linear-gradient(90deg,rgba(232,181
 .themebtn{display:inline-grid;place-items:center;width:36px;height:34px;border-radius:7px;border:1px solid var(--line2);background:none;color:var(--fg);cursor:pointer;margin-left:6px;padding:0}
 .themebtn:hover{border-color:var(--gold-dim);color:var(--gold)}
 .themebtn .sun{display:none} :root[data-theme="light"] .themebtn .sun{display:block} :root[data-theme="light"] .themebtn .moon{display:none}
+
+/* Окно графика: части позиции ровной таблицей */
+.legs{display:grid;grid-template-columns:auto auto 1fr auto auto;gap:0 16px;margin-top:8px;font-size:12px;color:var(--muted)}
+.legs>div{display:grid;grid-template-columns:subgrid;grid-column:1 / -1;align-items:baseline;padding:2px 6px;border-top:1px solid var(--line)}
+.legs>div:first-child{border-top:0}
+.legs>div.cur{background:rgba(232,181,74,.10);color:var(--fg);border-radius:4px}
+.legs>div>span:nth-child(3),.legs>div>span:nth-child(4),.legs>div>span:nth-child(5){text-align:right}
+.legs b{font-weight:800;color:var(--fg)}

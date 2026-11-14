@@ -27,6 +27,9 @@ export default function TradeChart({ data, openMs, entry, side, exits }: { data:
   // Подписи цен на правой шкале не должны налезать друг на друга и на цену входа
   const used: number[] = entry != null ? [y(entry)] : [];
   const tags = ex.map(e => { let ly = y(e.price); const dir = entry != null && ly < y(entry) ? -1 : 1; while (used.some(u => Math.abs(u - ly) < 17)) ly += 17 * dir; used.push(ly); return ly; });
+  // Подписи на самих свечах: если точки рядом, вторую подпись не рисуем — она есть на шкале справа
+  const drawn: [number, number][] = [];
+  const onChart = ex.map(e => { const cx = x(idxAt(e.ms)), cy = y(e.price); if (drawn.some(([a, b]) => Math.abs(a - cx) < 26 && Math.abs(b - cy) < 20)) return false; drawn.push([cx, cy]); return true; });
   return (
     <svg className="chart" viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`График ${data.symbol || ""} ${data.period}`}>
       {labels.map((v, i) => <g key={i}><line x1={pl} x2={W - pr} y1={y(v)} y2={y(v)} stroke="var(--line)" strokeWidth={0.6} /><text x={W - pr + 6} y={y(v) + 3}>{px(v)}</text></g>)}
@@ -44,7 +47,7 @@ export default function TradeChart({ data, openMs, entry, side, exits }: { data:
           <line x1={many ? cx : pl} x2={W - pr} y1={cy} y2={cy} stroke={col} strokeDasharray="2 3" opacity={e.hot || !many ? 1 : 0.6} />
           <circle cx={cx} cy={cy} r={e.hot && many ? 6 : 4.5} fill="var(--surface)" stroke={col} strokeWidth={2} />
           {many && <>
-            <text x={cx} y={cy + (entry != null && e.price < entry ? 17 : -10)} textAnchor="middle" style={{ fill: col, fontWeight: 700, fontSize: 11 }}>{e.label}</text>
+            {onChart[k] && <text x={cx} y={cy + (entry != null && e.price < entry ? 17 : -10)} textAnchor="middle" style={{ fill: col, fontWeight: 700, fontSize: 11 }}>{e.label}</text>}
             <rect x={W - pr + 2} y={tags[k] - 8} width={pr - 4} height={16} rx={3} fill={col} />
             <text x={W - pr + 6} y={tags[k] + 4} style={{ fill: "#0b0906", fontWeight: 700 }}>{e.label} {px(e.price)}</text></>}
         </g>;
