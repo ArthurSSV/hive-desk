@@ -352,3 +352,5 @@ tbody.blocks tr.hl>td:nth-child(2){background:linear-gradient(90deg,rgba(232,181
 .streaks .k{font-size:11.5px;color:var(--muted)} .streaks .v{font:700 18px var(--f-mono);margin-top:2px} .streaks .s{font-size:11.5px;color:var(--muted);margin-top:2px}
 .beads{display:flex;flex-wrap:wrap;gap:4px} .beads i{width:14px;height:14px;border-radius:4px;display:block}
 .beads i.w{background:var(--green)} .beads i.l{background:var(--red)}
+
+.an .r.few .l b,.an .r.few .l em{color:var(--muted)}

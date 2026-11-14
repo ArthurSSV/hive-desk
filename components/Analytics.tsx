@@ -3,9 +3,19 @@
 import { useMemo, useState } from "react";
 
 type Deal = { position_id: number | null; exec_ts: string; net_profit: number; is_close: boolean; side?: string; lots?: number | null; volume?: number | null; price?: number | null; entry_price?: number | null; conv?: number | null };
-type Meta = { position_id: number; sl: number | null; tp: number | null; close_reason: string | null };
-// Группы риска на сделку (% от начального баланса) и планового RR
-const RISK: [string, number][] = [["до 0.25%", 0.25], ["0.25–0.5%", 0.5], ["0.5–1%", 1], ["больше 1%", Infinity]];
+type Meta = { position_id: number; sl: number | null; tp: number | null; close_reason: string | null; exits?: { ts: number; price: number | null; kind: string }[] | null };
+// Группы планового RR; группы риска подбираются под трейдера автоматически
+const MIN_N = 5; // меньше — «мало данных»
+/** Границы групп риска по распределению сделок трейдера: 3 группы примерно поровну, шаг 0.05%. */
+function riskBuckets(xs: number[]): [string, number][] {
+  const s = [...xs].sort((a, b) => a - b), r = (v: number) => Math.max(0.05, Math.round(v * 20) / 20);
+  if (s.length < 6) return [["все сделки", Infinity]];
+  const a = r(s[Math.floor(s.length / 3)]), b = r(s[Math.floor((s.length * 2) / 3)]);
+  const f = (v: number) => `${v.toFixed(2).replace(/0$/, "")}%`;
+  if (a >= b) return [[`до ${f(a)}`, a], [`больше ${f(a)}`, Infinity]];
+  return [[`до ${f(a)}`, a], [`${f(a)}–${f(b)}`, b], [`больше ${f(b)}`, Infinity]];
+}
+const PART: Record<string, string> = { tp: "По тейку", sl: "По стопу", be: "Стоп в плюсе / б/у", stopout: "Стоп-аут", manual: "Вручную" };
 const RRG: [string, number][] = [["1:1", 1.25], ["1:1.5", 1.75], ["1:2–2.5", 2.75], ["1:3+", Infinity]];
 type Row = { k: string; n: number; w: number; pnl: number; ord: number };
 const WD = ["Воскресенье", "Понедельник", "Вторник", "Среда", "Четверг", "Пятница", "Суббота"];
@@ -22,12 +32,12 @@ export default function Analytics({ deals, initial, tz, meta = [] }: { deals: De
   const fmt = (v: number, short = false) => unit === "pct" ? `${sgn(v)}${Math.abs(initial ? (v / initial) * 100 : 0).toFixed(2)}%` : `${sgn(v)}$${Math.abs(v).toLocaleString("en-US", { maximumFractionDigits: short ? 0 : 2, minimumFractionDigits: short ? 0 : 2 })}`;
   const A = useMemo(() => {
     // Одна сделка = одна позиция: вход — первая открывающая сделка, результат — сумма всех частей
-    type P = { id: number; open: number | null; close: number; pnl: number; lots: number; vol: number; entry: number | null; buy: boolean; conv: number | null };
+    type P = { id: number; open: number | null; close: number; pnl: number; lots: number; vol: number; entry: number | null; buy: boolean; conv: number | null; parts: { ms: number; pnl: number }[] };
     const pos = new Map<number, P>();
     for (const d of deals) {
       if (d.position_id == null) continue;
-      const p = pos.get(d.position_id) || { id: d.position_id, open: null, close: 0, pnl: 0, lots: 0, vol: 0, entry: null, buy: true, conv: null }, ms = Date.parse(d.exec_ts);
-      if (d.is_close) { p.pnl += Number(d.net_profit || 0); p.close = Math.max(p.close, ms); if (d.conv != null) p.conv = Number(d.conv); if (d.entry_price != null) p.entry = Number(d.entry_price); }
+      const p = pos.get(d.position_id) || { id: d.position_id, open: null, close: 0, pnl: 0, lots: 0, vol: 0, entry: null, buy: true, conv: null, parts: [] }, ms = Date.parse(d.exec_ts);
+      if (d.is_close) { p.parts.push({ ms, pnl: Number(d.net_profit || 0) }); p.pnl += Number(d.net_profit || 0); p.close = Math.max(p.close, ms); if (d.conv != null) p.conv = Number(d.conv); if (d.entry_price != null) p.entry = Number(d.entry_price); }
       else { if (p.open == null || ms < p.open) p.open = ms; p.lots += Number(d.lots || 0); p.vol += Number(d.volume || 0); p.buy = d.side === "buy"; if (p.entry == null && d.price != null) p.entry = Number(d.price); }
       pos.set(d.position_id, p);
     }
@@ -62,9 +72,17 @@ export default function Analytics({ deals, initial, tz, meta = [] }: { deals: De
       const dist = sl != null && t.entry != null ? Math.abs(t.entry - sl) : null;
       const riskUsd = dist && t.vol && t.conv ? dist * (t.vol / 100) * t.conv : null;
       const risk = riskUsd && initial ? (riskUsd / initial) * 100 : null;
-      const plan = dist && tp != null && t.entry != null ? Math.abs(tp - t.entry) / dist : null;
-      const how = m.close_reason === "stopout" ? "Стоп-аут" : m.close_reason === "sltp" ? (t.pnl >= 0 ? "По тейку" : "По стопу") : m.close_reason === "manual" ? "Вручную" : null;
-      return { t, risk, plan, R: riskUsd ? t.pnl / riskUsd : null, how };
+      // Выходы: каждая часть позиции — по тейку, стопом в минус, стопом в плюсе (б/у), стоп-аутом или вручную.
+      // Части сопоставляем с закрывающими ордерами по порядку; без данных о выходах — по причине закрытия и знаку результата.
+      const parts = [...t.parts].sort((a, b) => a.ms - b.ms), ex = (m.exits || []).slice().sort((a, b) => a.ts - b.ts);
+      const kinds = parts.map((p, i) => {
+        const k = ex.length === parts.length ? ex[i].kind : m.close_reason === "stopout" ? "stopout" : m.close_reason === "sltp" ? "sl" : m.close_reason === "manual" ? "manual" : null;
+        return k === "sl" && p.pnl >= 0 ? "be" : k;
+      });
+      // Плановый RR — по первому тейку (при частичных тейках)
+      const firstTp = ex.find(e => e.kind === "tp" && e.price != null)?.price ?? tp;
+      const plan = dist && firstTp != null && t.entry != null ? Math.abs(Number(firstTp) - t.entry) / dist : null;
+      return { t, risk, plan, R: riskUsd ? t.pnl / riskUsd : null, parts: parts.map((p, i) => ({ pnl: p.pnl, kind: kinds[i] })) };
     });
     return {
       seq, maxW, maxL, cur: run, curW: prev, base, after, lot: { up, same, down }, rr, metaN: withMeta.length,
@@ -76,11 +94,14 @@ export default function Analytics({ deals, initial, tz, meta = [] }: { deals: De
         ["Время в сделке", group(t => { const m = (t.close - t.open) / 60000, i = DUR.findIndex(([, lim]) => m < lim); return [DUR[i][0], i]; }).sort(byPnl)],
       ] as [string, Row[]][],
     };
-  }, [deals, tz]);
+  }, [deals, tz, meta, initial]);
 
-  const bar = (k: string, sub: string, val: string, valCls: string, w: number, col: string) => (
-    <div className="r" key={k}><div className="l"><div><b>{k}</b> <span>{sub}</span></div><em className={valCls}>{val}</em></div>
-      <div className="b"><i style={{ width: `${Math.max(2, Math.min(100, w))}%`, background: `var(--${col})` }} /></div></div>);
+  const bar = (k: string, sub: string, val: string, valCls: string, w: number, col: string, n = MIN_N) => {
+    const few = n < MIN_N; // мало данных — строка серая, чтобы не выглядела выводом
+    return (<div className={`r${few ? " few" : ""}`} key={k} title={few ? "Мало данных: меньше 5 сделок, вывод ненадёжный" : undefined}>
+      <div className="l"><div><b>{k}</b> <span>{sub}{few ? " · мало данных" : ""}</span></div><em className={few ? "" : valCls}>{val}</em></div>
+      <div className="b"><i style={{ width: `${Math.max(2, Math.min(100, w))}%`, background: few ? "var(--muted)" : `var(--${col})` }} /></div></div>);
+  };
   const Rs = (v: number) => `${v >= 0 ? "+" : ""}${v.toFixed(2)}R`;
   const withSL = A.rr.filter(x => x.risk != null), noSL = A.rr.filter(x => x.risk == null);
   const grp = (list: typeof A.rr, keyOf: (x: (typeof A.rr)[number]) => string | null, order: string[]) => {
@@ -88,7 +109,9 @@ export default function Analytics({ deals, initial, tz, meta = [] }: { deals: De
     for (const x of list) { const k = keyOf(x); if (!k) continue; const g = m.get(k) || { k, n: 0, w: 0, pnl: 0, R: 0, nR: 0 }; g.n++; if (x.t.pnl > 0) g.w++; g.pnl += x.t.pnl; if (x.R != null) { g.R += x.R; g.nR++; } m.set(k, g); }
     return order.map(k => m.get(k)).filter(Boolean) as { k: string; n: number; w: number; pnl: number; R: number; nR: number }[];
   };
-  const rows = (gs: ReturnType<typeof grp>) => gs.map(g => bar(g.k, `· ${g.n} сд${g.nR ? ` · ${Rs(g.R / g.nR)}` : ""}`, `${Math.round((g.w / g.n) * 100)}%`, g.pnl >= 0 ? "pos" : "neg", (g.w / g.n) * 100, g.pnl >= 0 ? "green" : "red"));
+  const rows = (gs: ReturnType<typeof grp>) => gs.map(g => bar(g.k, `· ${g.n} сд${g.nR ? ` · ${Rs(g.R / g.nR)}` : ""}`, `${Math.round((g.w / g.n) * 100)}%`, g.pnl >= 0 ? "pos" : "neg", (g.w / g.n) * 100, g.pnl >= 0 ? "green" : "red", g.n));
+  const RISK = riskBuckets(withSL.map(x => x.risk!));
+  const allParts = A.rr.flatMap(x => x.parts).filter(p => p.kind), partsN = allParts.length || 1;
   const avg = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null);
   const avgRisk = avg(withSL.map(x => x.risk!)), avgPlan = avg(A.rr.filter(x => x.plan != null).map(x => x.plan!)), avgR = avg(A.rr.filter(x => x.R != null).map(x => x.R!));
   const lt = A.lot.up + A.lot.same + A.lot.down || 1;
@@ -103,9 +126,9 @@ export default function Analytics({ deals, initial, tz, meta = [] }: { deals: De
       <div className="an an3" style={{ marginTop: 14 }}>
         <div><h3>Последние сделки подряд</h3><div className="beads">{A.seq.slice(-40).map((w, i) => <i key={i} className={w ? "w" : "l"} title={w ? "плюс" : "минус"} />)}</div>
           <p className="fine" style={{ margin: "8px 0 0" }}>Зелёный — плюс, красный — минус. Новые справа.</p></div>
-        <div><h3>Сделка после серии стопов</h3>{A.after.map(r => bar(r.n === 0 ? "После плюса" : `После ${r.n} ${r.n === 1 ? "стопа" : "стопов"} подряд`, `· ${r.t} сд`, r.t ? `${Math.round(r.wr * 100)}%` : "—", r.t ? (r.wr >= A.base ? "pos" : "neg") : "", r.wr * 100, r.wr >= A.base ? "green" : "red"))}
+        <div><h3>Сделка после серии стопов</h3>{A.after.map(r => bar(r.n === 0 ? "После плюса" : `После ${r.n} ${r.n === 1 ? "стопа" : "стопов"} подряд`, `· ${r.t} сд`, r.t ? `${Math.round(r.wr * 100)}%` : "—", r.t ? (r.wr >= A.base ? "pos" : "neg") : "", r.wr * 100, r.wr >= A.base ? "green" : "red", r.t))}
           <p className="fine" style={{ margin: "8px 0 0" }}>Средний винрейт {Math.round(A.base * 100)}%. Красным — ниже среднего: после такой серии лучше остановиться.</p></div>
-        <div><h3>Лот после стопа</h3>{([["Увеличил", A.lot.up, "red"], ["Тот же", A.lot.same, "green"], ["Уменьшил", A.lot.down, "green"]] as [string, number, string][]).map(([k, v, c]) => bar(k, `· ${v} раз`, `${Math.round((v / lt) * 100)}%`, c === "red" && v ? "neg" : "", (v / lt) * 100, c))}
+        <div><h3>Лот после стопа</h3>{([["Увеличил", A.lot.up, "red"], ["Тот же", A.lot.same, "green"], ["Уменьшил", A.lot.down, "green"]] as [string, number, string][]).map(([k, v, c]) => bar(k, `· ${v} раз`, `${Math.round((v / lt) * 100)}%`, c === "red" && v ? "neg" : "", (v / lt) * 100, c, A.lot.up + A.lot.same + A.lot.down))}
           <p className="fine" style={{ margin: "8px 0 0" }}>«Увеличил» — следующая сделка после стопа с лотом больше на 20%+. Частый признак отыгрыша.</p></div>
       </div>
     </section>);
@@ -120,12 +143,12 @@ export default function Analytics({ deals, initial, tz, meta = [] }: { deals: De
         </div>
         <div className="an an3" style={{ marginTop: 14 }}>
           <div><h3>Винрейт по риску на сделку</h3>{rows(grp(withSL, x => RISK.find(([, lim]) => x.risk! <= lim)![0], RISK.map(r => r[0])))}
-            {noSL.length > 0 && bar("Без стопа", `· ${noSL.length} сд`, `${Math.round((noSL.filter(x => x.t.pnl > 0).length / noSL.length) * 100)}%`, "neg", (noSL.filter(x => x.t.pnl > 0).length / noSL.length) * 100, "red")}</div>
+            {noSL.length > 0 && bar("Без стопа", `· ${noSL.length} сд`, `${Math.round((noSL.filter(x => x.t.pnl > 0).length / noSL.length) * 100)}%`, "neg", (noSL.filter(x => x.t.pnl > 0).length / noSL.length) * 100, "red", noSL.length)}</div>
           <div><h3>Винрейт по плановому RR</h3>{rows(grp(A.rr.filter(x => x.plan != null), x => RRG.find(([, lim]) => x.plan! < lim)![0], RRG.map(r => r[0])))}
             {!A.rr.some(x => x.plan != null) && <p className="fine">Тейки не выставлялись.</p>}</div>
-          <div><h3>Как закрывались</h3>{["По тейку", "По стопу", "Стоп-аут", "Вручную"].map(k => { const l = A.rr.filter(x => x.how === k); if (!l.length) return null; const pn = l.reduce((a, x) => a + x.t.pnl, 0);
-            return bar(k, `· ${l.length} сд`, fmt(pn), cls(pn), (l.length / A.metaN) * 100, k === "По тейку" ? "green" : k === "Вручную" ? "gold" : "red"); })}
-            <p className="fine" style={{ margin: "8px 0 0" }}>Справа — сколько принесли или забрали эти сделки. Полоска — доля от всех сделок.</p></div>
+          <div><h3>Как закрывались</h3>{["tp", "be", "sl", "stopout", "manual"].map(k => { const l = allParts.filter(p => p.kind === k); if (!l.length) return null; const pn = l.reduce((a, p) => a + p.pnl, 0);
+            return bar(PART[k], `· ${l.length} ${l.length === 1 ? "закрытие" : l.length < 5 ? "закрытия" : "закрытий"}`, fmt(pn), cls(pn), (l.length / partsN) * 100, k === "tp" || k === "be" ? "green" : k === "manual" ? "gold" : "red", l.length); })}
+            <p className="fine" style={{ margin: "8px 0 0" }}>Каждая часть позиции считается отдельно: TP1 и SL одной позиции — два закрытия. «Стоп в плюсе / б/у» — сработал стоп, перенесённый в безубыток или в прибыль. Справа — сколько принесли или забрали.</p></div>
         </div>
         <p className="fine" style={{ margin: "12px 0 0" }}>Риск — расстояние от входа до первоначального стопа × объём, в % от начального баланса. RR — расстояние до тейка к расстоянию до стопа. Результат в R — во сколько стопов обошлась или принесла сделка. Если стоп переносили, считается первый.</p>
       </>}
@@ -145,11 +168,8 @@ export default function Analytics({ deals, initial, tz, meta = [] }: { deals: De
         </div>
         <div className="an">{A.cards.map(([title, rows]) => { const mx = Math.max(...rows.map(r => Math.abs(r.pnl)), 1); return (
           <div key={title}><h3>{title}</h3>{rows.map(r => (
-            <div className="r" key={r.k}>
-              <div className="l"><div><b>{r.k}</b> <span>· {r.n} сд · {Math.round((r.w / r.n) * 100)}%</span></div><em className={cls(r.pnl)}>{fmt(r.pnl)}</em></div>
-              <div className="b"><i style={{ width: `${Math.max(2, (Math.abs(r.pnl) / mx) * 100)}%`, background: r.pnl >= 0 ? "var(--green)" : "var(--red)" }} /></div>
-            </div>))}</div>); })}</div>
-        <p className="fine" style={{ margin: "12px 0 0" }}>«сд» — число позиций (позиция, закрытая частями, считается одной), процент — доля прибыльных.</p>
+            bar(r.k, `· ${r.n} сд · ${Math.round((r.w / r.n) * 100)}%`, fmt(r.pnl), cls(r.pnl), (Math.abs(r.pnl) / mx) * 100, r.pnl >= 0 ? "green" : "red", r.n)))}</div>); })}</div>
+        <p className="fine" style={{ margin: "12px 0 0" }}>«сд» — число позиций (позиция, закрытая частями, считается одной), процент — доля прибыльных. Серые строки — меньше 5 сделок, выводы по ним ненадёжны.</p>
       </>}
     </section>
     {seriesBlock}

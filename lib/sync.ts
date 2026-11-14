@@ -104,24 +104,30 @@ async function pullDeals(sb: SupabaseClient, acc: Account) {
 const isBuy = (s: any) => s === 1 || s === "BUY";
 const typeOf = (t: any) => (typeof t === "string" ? t : ({ 1: "MARKET", 2: "LIMIT", 3: "STOP", 4: "STOP_LOSS_TAKE_PROFIT", 5: "MARKET_RANGE", 6: "STOP_LIMIT" } as Record<number, string>)[t] || "");
 
-/** Стоп, тейк и причина закрытия позиций: из истории ордеров и из открытых позиций. */
+/** Стоп, тейк и выходы позиций: из истории ордеров и из открытых позиций. */
 async function pullMeta(sb: SupabaseClient, c: CTraderConnection, acc: Account, fromMs: number) {
-  const { data: have, error } = await sb.from("position_meta").select("position_id,sl,tp,sl_source,close_reason").eq("account_id", acc.id);
+  // Колонки exits/raw появляются после миграции 013 — без неё работаем как раньше
+  let { data: have, error } = await sb.from("position_meta").select("position_id,sl,tp,sl_source,close_reason,exits").eq("account_id", acc.id);
+  const v13 = !error;
+  if (error) ({ data: have, error } = await sb.from("position_meta").select("position_id,sl,tp,sl_source,close_reason").eq("account_id", acc.id) as any);
   if (error) return; // миграция 012 ещё не выполнена
   const { count } = await sb.from("deals").select("deal_id", { count: "exact", head: true }).eq("account_id", acc.id);
-  // Первый раз забираем всю историю счёта, дальше — только свежие ордера
-  const since = (have || []).length || !count ? fromMs : Date.now() - HISTORY_DAYS * 86400_000;
-  const meta = new Map<number, any>((have || []).map(h => [Number(h.position_id), { ...h }]));
+  // Всю историю счёта берём в первый раз и один раз после миграции 013, дальше — только свежие ордера
+  const full = !(have || []).length || (v13 && !(have || []).some((h: any) => h.exits != null));
+  const since = full && count ? Date.now() - HISTORY_DAYS * 86400_000 : fromMs;
+  const meta = new Map<number, any>((have || []).map((h: any) => [Number(h.position_id), { ...h }]));
   const touch = new Set<number>();
-  const get = (id: number) => { if (!meta.has(id)) meta.set(id, { position_id: id, sl: null, tp: null, sl_source: null, close_reason: null }); touch.add(id); return meta.get(id); };
+  const get = (id: number) => { if (!meta.has(id)) meta.set(id, { position_id: id, sl: null, tp: null, sl_source: null, close_reason: null, exits: null }); touch.add(id); return meta.get(id); };
   const rel = (o: any, v: any, sign: number) => { const p = Number(o.executionPrice); return v != null && p ? p + (sign * Number(v)) / 100000 : null; };
+  const closing = new Map<number, any[]>();
 
   for (const o of await c.orders(acc.ctid_trader_account_id, since, Date.now())) {
     const pid = o.positionId != null ? Number(o.positionId) : null; if (pid == null) continue;
     const m = get(pid), buy = isBuy(o.tradeData?.tradeSide), status = String(o.orderStatus ?? "");
     if (o.closingOrder) {
       if (!/FILLED|^2$/.test(status) && status !== "") continue;
-      m.close_reason = o.isStopOut ? "stopout" : typeOf(o.orderType) === "STOP_LOSS_TAKE_PROFIT" ? "sltp" : m.close_reason === "sltp" ? "sltp" : "manual";
+      if (!closing.has(pid)) closing.set(pid, []);
+      closing.get(pid)!.push(o);
     } else if (m.sl_source !== "order") {
       // Стоп у рыночного ордера задаётся относительно цены исполнения (в 1/100000 цены)
       const sl = o.stopLoss != null ? Number(o.stopLoss) : rel(o, o.relativeStopLoss, buy ? -1 : 1);
@@ -129,13 +135,42 @@ async function pullMeta(sb: SupabaseClient, c: CTraderConnection, acc: Account, 
       if (sl != null || tp != null) { m.sl = sl ?? m.sl; m.tp = tp ?? m.tp; m.sl_source = "order"; }
     }
   }
-  // Стоп, поставленный уже после входа, видно только у открытой позиции — запоминаем первый увиденный
+  // Выходы позиции по закрывающим ордерам: тейк, стоп, стоп-аут или вручную
+  for (const [pid, list] of closing) {
+    const m = get(pid);
+    list.sort((x, y) => Number(x.utcLastUpdateTimestamp || 0) - Number(y.utcLastUpdateTimestamp || 0));
+    const exits = list.map(o => {
+      const t = typeOf(o.orderType), price = o.executionPrice != null ? Number(o.executionPrice) : null;
+      let kind = "manual";
+      if (o.isStopOut) kind = "stopout";
+      else if (t === "LIMIT") kind = "tp";                       // частичный тейк лимитным ордером
+      else if (t === "STOP_LOSS_TAKE_PROFIT") {
+        // У сработавшего тейка цена — limitPrice/takeProfit, у стопа — stopPrice/stopLoss; иначе сравниваем с известными уровнями
+        if (o.limitPrice != null || (o.takeProfit != null && o.stopLoss == null)) kind = "tp";
+        else if (o.stopPrice != null || o.stopLoss != null) kind = "sl";
+        else if (price != null && m.tp != null && m.sl != null) kind = Math.abs(price - Number(m.tp)) < Math.abs(price - Number(m.sl)) ? "tp" : "sl";
+        else kind = "sl";
+      }
+      if (kind === "tp" && price != null && m.tp == null) m.tp = Number(o.limitPrice ?? o.takeProfit ?? price);
+      return { ts: Number(o.utcLastUpdateTimestamp || 0), price, kind };
+    });
+    m.exits = exits;
+    m.close_reason = exits.some(e => e.kind === "stopout") ? "stopout" : exits.some(e => e.kind === "tp" || e.kind === "sl") ? "sltp" : "manual";
+    // Сырые ордера — для проверки, в каких полях cTrader отдаёт цену срабатывания (без лишних данных)
+    m.raw = list.map(o => ({ orderType: o.orderType, orderStatus: o.orderStatus, closingOrder: o.closingOrder, isStopOut: o.isStopOut, executionPrice: o.executionPrice,
+      limitPrice: o.limitPrice, stopPrice: o.stopPrice, stopLoss: o.stopLoss, takeProfit: o.takeProfit, relativeStopLoss: o.relativeStopLoss, relativeTakeProfit: o.relativeTakeProfit, ts: o.utcLastUpdateTimestamp }));
+  }
+  // Тейк, поставленный после входа, видно только у открытой позиции: запоминаем последний перед закрытием.
+  // Стоп — первый увиденный (риск считаем по первоначальному).
   for (const p of await c.openPositions(acc.ctid_trader_account_id)) {
     const pid = Number(p.positionId), m = get(pid);
     if (m.sl == null && p.stopLoss != null) { m.sl = Number(p.stopLoss); m.sl_source = m.sl_source || "open"; }
-    if (m.tp == null && p.takeProfit != null) m.tp = Number(p.takeProfit);
+    if (p.takeProfit != null) m.tp = Number(p.takeProfit);
   }
-  const rows = [...touch].map(id => ({ ...meta.get(id), account_id: acc.id, user_id: acc.user_id, updated_at: new Date().toISOString() }));
+  const rows = [...touch].map(id => {
+    const { raw, exits, ...r } = meta.get(id);
+    return { ...r, ...(v13 ? { exits: exits ?? null, raw: raw ?? null } : {}), account_id: acc.id, user_id: acc.user_id, updated_at: new Date().toISOString() };
+  });
   for (let i = 0; i < rows.length; i += 500) await sb.from("position_meta").upsert(rows.slice(i, i + 500), { onConflict: "account_id,position_id" });
 }
 

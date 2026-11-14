@@ -458,3 +458,5 @@ alter table public.ctrader_accounts add column if not exists access_rights text;
 alter table public.position_meta enable row level security;
 drop policy if exists p_meta_sel on public.position_meta;
 create policy p_meta_sel on public.position_meta for select using (user_id = auth.uid() or public.is_admin());
+alter table public.position_meta add column if not exists exits jsonb;  -- [{ts, price, kind}] по времени
+alter table public.position_meta add column if not exists raw jsonb;    -- закрывающие ордера как их отдал cTrader
