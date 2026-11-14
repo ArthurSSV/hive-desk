@@ -231,10 +231,12 @@ tr.dead:hover>td{background-color:rgba(240,86,90,.10)}
 /* История сделок: позиция, закрытая частями */
 .part{display:inline-block;margin-left:8px;font:700 10.5px/1.5 'JetBrains Mono',monospace;padding:0 6px;border-radius:5px;border:1px solid var(--gold-dim);color:var(--gold);background:rgba(232,181,74,.08)}
 .part.sl{border-color:rgba(240,86,90,.5);color:var(--red);background:var(--red-bg)}
+tbody.blocks tr.alt>td{background:rgba(255,255,255,.03)}
+:root[data-theme="light"] tbody.blocks tr.alt>td{background:rgba(120,90,20,.05)}
 tr.multi>td:first-child{box-shadow:inset 2px 0 0 var(--gold-dim)}
-tr.hl>td{background:rgba(232,181,74,.05)}
-tr.hl>td:first-child{background:linear-gradient(90deg,rgba(232,181,74,.30),rgba(232,181,74,.12));box-shadow:inset 3px 0 0 var(--gold)}
-tr.hl>td:nth-child(2){background:linear-gradient(90deg,rgba(232,181,74,.12),rgba(232,181,74,.05))}
+tbody.blocks tr.hl>td{background:rgba(232,181,74,.05)}
+tbody.blocks tr.hl>td:first-child{background:linear-gradient(90deg,rgba(232,181,74,.30),rgba(232,181,74,.12));box-shadow:inset 3px 0 0 var(--gold)}
+tbody.blocks tr.hl>td:nth-child(2){background:linear-gradient(90deg,rgba(232,181,74,.12),rgba(232,181,74,.05))}
 .posinfo{min-height:34px;display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:6px 12px;border-radius:9px;border:1px dashed var(--line2);color:var(--muted);font-size:13px;margin-bottom:10px}
 .posinfo.on{border:1px solid var(--gold-dim);background:linear-gradient(90deg,rgba(232,181,74,.14),transparent 80%);color:var(--fg)}
 
@@ -260,9 +262,9 @@ tr.hl>td:nth-child(2){background:linear-gradient(90deg,rgba(232,181,74,.12),rgba
 :root[data-theme="light"] tbody tr:hover{background:rgba(168,119,15,.07)}
 :root[data-theme="light"] tr.dead>td{background:rgba(201,48,47,.07)}
 :root[data-theme="light"] tr.dead>td:first-child{background:linear-gradient(90deg,rgba(201,48,47,.30),rgba(201,48,47,.07))}
-:root[data-theme="light"] tr.hl>td{background:rgba(232,181,74,.14)}
-:root[data-theme="light"] tr.hl>td:first-child{background:linear-gradient(90deg,rgba(232,181,74,.55),rgba(232,181,74,.26))}
-:root[data-theme="light"] tr.hl>td:nth-child(2){background:linear-gradient(90deg,rgba(232,181,74,.26),rgba(232,181,74,.14))}
+:root[data-theme="light"] tbody.blocks tr.hl>td{background:rgba(232,181,74,.14)}
+:root[data-theme="light"] tbody.blocks tr.hl>td:first-child{background:linear-gradient(90deg,rgba(232,181,74,.55),rgba(232,181,74,.26))}
+:root[data-theme="light"] tbody.blocks tr.hl>td:nth-child(2){background:linear-gradient(90deg,rgba(232,181,74,.26),rgba(232,181,74,.14))}
 :root[data-theme="light"] .part{background:rgba(168,119,15,.10)}
 :root[data-theme="light"] tr.dead:hover>td{background-color:rgba(201,48,47,.12)}
 :root[data-theme="light"] .notif-row.new{background:rgba(232,181,74,.20)} :root[data-theme="light"] .notif-row:hover{background:rgba(232,181,74,.12)}

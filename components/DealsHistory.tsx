@@ -31,7 +31,7 @@ export default function DealsHistory({ deals, login, initial, accountId, tz }: {
   function show(e: React.MouseEvent<HTMLTableRowElement>, key: number, pos: number | null, pinned: boolean) {
     if (pos == null) return;
     clearTimeout(hideT.current);
-    const r = e.currentTarget.getBoundingClientRect(), w = Math.min(640, innerWidth - 32), h = 360;
+    const r = e.currentTarget.getBoundingClientRect(), w = Math.min(660, innerWidth - 32), h = 420;
     const left = Math.max(16, Math.min(e.clientX - w / 2, innerWidth - w - 16));
     const top = r.bottom + h + 8 < innerHeight ? r.bottom + 6 : Math.max(8, r.top - h - 6);
     setHover(cur => (pinned && cur?.pinned && cur.key === key ? null : cur?.key === key ? { ...cur, pinned: pinned || cur.pinned } : { key, pos, top, left, pinned, tf: "" }));
@@ -51,32 +51,30 @@ export default function DealsHistory({ deals, login, initial, accountId, tz }: {
   const parts = useMemo(() => {
     const by = new Map<number, D[]>();
     for (const d of deals) if (d.is_close && d.position_id != null) { if (!by.has(d.position_id)) by.set(d.position_id, []); by.get(d.position_id)!.push(d); }
-    const label = new Map<number, { t: string; sl: boolean }>(), total = new Map<number, { n: number; lots: number; pnl: number }>();
+    const label = new Map<number, { t: string; sl: boolean }>(), total = new Map<number, { n: number; lots: number; pnl: number; list: D[] }>();
     for (const [pos, list] of by) {
       if (list.length < 2) continue;
       list.sort((a, b) => a.exec_ts.localeCompare(b.exec_ts));
       let tp = 0;
       for (const d of list) label.set(d.deal_id, Number(d.net_profit) < 0 ? { t: "SL", sl: true } : { t: `TP${++tp}`, sl: false });
-      total.set(pos, { n: list.length, lots: list.reduce((a, d) => a + Number(d.lots || 0), 0), pnl: list.reduce((a, d) => a + Number(d.net_profit), 0) });
+      total.set(pos, { n: list.length, lots: list.reduce((a, d) => a + Number(d.lots || 0), 0), pnl: list.reduce((a, d) => a + Number(d.net_profit), 0), list });
     }
     return { label, total };
   }, [deals]);
   const hot = hover ? parts.total.get(hover.pos) : undefined;
   const pages = Math.max(1, Math.ceil(rows.length / PAGE));
   const view = rows.slice(page * PAGE, page * PAGE + PAGE);
+  // Чередование тона блоками: все части одной позиции — одного тона, соседняя позиция — другого
+  const alt: boolean[] = []; { let blk = -1, prev: number | null | undefined; for (const r of view) { if (r.d.position_id !== prev || prev == null) { blk++; prev = r.d.position_id; } alt.push(blk % 2 === 1); } }
 
   return (
     <section className="panel">
       <div className="ph"><h2>История сделок</h2>
         <div className="tools"><input id="dq" type="search" placeholder="Позиция, сделка или символ" value={q} onChange={e => { setQ(e.target.value); setPage(0); }} aria-label="Поиск сделки" /></div></div>
-      {parts.total.size > 0 && (
-        <div className={`posinfo${hot ? " on" : ""}`} aria-live="polite">{hot
-          ? <>Позиция <b className="mono">{hover!.pos}</b> · закрыта в {hot.n} {hot.n < 5 ? "части" : "частей"} · общий лот <b className="mono">{hot.lots.toFixed(2)}</b> · итог <b className={`mono ${hot.pnl >= 0 ? "pos" : "neg"}`}>{hot.pnl < 0 ? "-" : "+"}${Math.abs(hot.pnl).toFixed(2)}</b>{initial ? <span className="fine"> ({((hot.pnl / initial) * 100).toFixed(2)}%)</span> : null}</>
-          : "Позиции, закрытые частями, отмечены чертой слева: наведите на строку, чтобы увидеть все части и итог"}</div>)}
       <div className="tablewrap"><table>
         <thead><tr><th>Счёт</th><th>Позиция</th><th>Открыта</th><th>Символ</th><th>Сторона</th><th className="n">Лот</th><th className="n">Цена входа</th><th className="n">Цена выхода</th><th>Закрыта</th><th className="n">Прибыль</th><th className="n">Прибыль %</th></tr></thead>
-        <tbody>{view.map(({ d, o, side, pct }) => (
-          <tr key={d.deal_id} className={[parts.label.has(d.deal_id) ? "multi" : "", hot && d.position_id === hover!.pos ? "hl" : ""].join(" ").trim() || undefined}
+        <tbody className="blocks">{view.map(({ d, o, side, pct }, i) => (
+          <tr key={d.deal_id} className={[parts.label.has(d.deal_id) ? "multi" : "", alt[i] ? "alt" : "", hot && d.position_id === hover!.pos ? "hl" : ""].join(" ").trim() || undefined}
             style={{ cursor: "pointer", background: hover?.key === d.deal_id ? "rgba(232,181,74,.06)" : undefined }}
             onMouseEnter={e => !hover?.pinned && show(e, d.deal_id, d.position_id, false)} onMouseLeave={leave}
             onClick={e => show(e, d.deal_id, d.position_id, true)} title="Наведите или нажмите, чтобы открыть график">
@@ -99,26 +97,33 @@ export default function DealsHistory({ deals, login, initial, accountId, tz }: {
         const { d, o, side } = row;
         const base = cache[`${hover.pos}:`], c = cache[`${hover.pos}:${hover.tf}`];
         const curTf = hover.tf || (base && typeof base === "object" && "bars" in base ? base.period : "");
-        const openMs = o ? Date.parse(o.exec_ts) : null, closeMs = Date.parse(d.exec_ts);
+        const grp = parts.total.get(hover.pos), list = grp ? grp.list : [d];
+        const lots = grp ? grp.lots : Number(d.lots || 0), sum = grp ? grp.pnl : Number(d.net_profit);
+        const exits = list.map(p => ({ ms: Date.parse(p.exec_ts), price: p.price, label: parts.label.get(p.deal_id)?.t || "Выход", win: Number(p.net_profit) >= 0, hot: p.deal_id === d.deal_id }));
+        const openMs = o ? Date.parse(o.exec_ts) : null, closeMs = Math.max(...exits.map(e => e.ms));
         const pick = (tf: string) => { const t = base && typeof base === "object" && "bars" in base && base.period === tf ? "" : tf; setHover(h => (h ? { ...h, tf: t, pinned: true } : h)); load(hover.pos, t); };
         return (
           <div role="dialog" aria-label="График сделки" onMouseEnter={() => clearTimeout(hideT.current)} onMouseLeave={leave}
-            style={{ position: "fixed", zIndex: 30, top: hover.top, left: hover.left, width: "min(640px, calc(100vw - 32px))", padding: 14, borderRadius: 12, background: "var(--surface)", border: "1px solid var(--gold-dim)", boxShadow: "0 18px 50px var(--shadow)" }}>
+            style={{ position: "fixed", zIndex: 30, top: hover.top, left: hover.left, width: "min(660px, calc(100vw - 32px))", padding: 14, borderRadius: 12, background: "var(--surface)", border: "1px solid var(--gold-dim)", boxShadow: "0 18px 50px var(--shadow)" }}>
             <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center", marginBottom: 8, flexWrap: "wrap" }}>
-              <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}><b>{d.symbol}</b><span className={`side ${side}`}>{side === "buy" ? "BUY" : "SELL"}</span><span className="mono fine">{d.lots != null ? Number(d.lots).toFixed(2) : "—"} лот · #{d.position_id}</span>
+              <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}><b>{d.symbol}</b><span className={`side ${side}`}>{side === "buy" ? "BUY" : "SELL"}</span><span className="mono fine">{lots ? lots.toFixed(2) : "—"} лот · #{d.position_id}</span>
                 <span className="tfs" role="group" aria-label="Таймфрейм">{TFS.map(tf => {
                   const off = openMs == null || barsInWindow(openMs, closeMs, tf) > 3000;
                   return <button key={tf} type="button" disabled={off} aria-pressed={curTf === tf} title={off ? "Слишком много свечей для этой сделки" : undefined} onClick={() => pick(tf)}>{tf}</button>;
                 })}</span></div>
-              <div style={{ display: "flex", gap: 10, alignItems: "center" }}><b className={`mono ${Number(d.net_profit) >= 0 ? "pos" : "neg"}`}>{Number(d.net_profit) < 0 ? "-" : "+"}${Math.abs(Number(d.net_profit)).toFixed(2)}</b>
+              <div style={{ display: "flex", gap: 10, alignItems: "center" }}><b className={`mono ${sum >= 0 ? "pos" : "neg"}`}>{sum < 0 ? "-" : "+"}${Math.abs(sum).toFixed(2)}</b>
                 {hover.pinned && <button type="button" className="signout" style={{ margin: 0 }} onClick={() => setHover(null)}>Закрыть</button>}</div>
             </div>
+            {grp && <div className="posinfo on" style={{ marginBottom: 8 }}>Позиция закрыта в <b className="mono">{grp.n}</b> {grp.n < 5 ? "части" : "частей"} · общий лот <b className="mono">{grp.lots.toFixed(2)}</b> · итог <b className={`mono ${grp.pnl >= 0 ? "pos" : "neg"}`}>{grp.pnl < 0 ? "-" : "+"}${Math.abs(grp.pnl).toFixed(2)}</b>{initial ? <span className="fine"> ({((grp.pnl / initial) * 100).toFixed(2)}%)</span> : null}</div>}
             {c === "loading" || c === undefined ? <p className="fine" style={{ height: 260, display: "grid", placeItems: "center", margin: 0 }}>Загружаю график…</p>
               : c === "none" ? <p className="fine" style={{ height: 80, display: "grid", placeItems: "center", margin: 0 }}>График появится после следующей синхронизации (до 15 минут).</p>
               : "err" in c ? <p className="fine" style={{ height: 80, display: "grid", placeItems: "center", margin: 0, color: "var(--red)" }}>{c.err}</p>
-              : <TradeChart data={c} openMs={openMs} closeMs={closeMs} entry={d.entry_price ?? o?.price ?? null} exit={d.price} side={side} />}
+              : <TradeChart data={c} openMs={openMs} entry={d.entry_price ?? o?.price ?? null} side={side} exits={exits} />}
             <div className="fine" style={{ display: "flex", justifyContent: "space-between", gap: 8, marginTop: 6, flexWrap: "wrap" }}>
-              <span>Вход {o ? dt(o.exec_ts) : "—"} по {px(d.entry_price ?? o?.price ?? null)}</span><span>Выход {dt(d.exec_ts)} по {px(d.price)}</span></div>
+              <span>Вход {o ? dt(o.exec_ts) : "—"} по {px(d.entry_price ?? o?.price ?? null)}</span>
+              {grp ? list.map(p => { const lb = parts.label.get(p.deal_id), w = Number(p.net_profit) >= 0; return (
+                <span key={p.deal_id}><b className={w ? "pos" : "neg"}>{lb?.t}</b> {dt(p.exec_ts).slice(-5)} по {px(p.price)} · {Number(p.lots || 0).toFixed(2)} лот · <span className={`mono ${w ? "pos" : "neg"}`}>{w ? "" : "-"}${Math.abs(Number(p.net_profit)).toFixed(2)}</span></span>); })
+                : <span>Выход {dt(d.exec_ts)} по {px(d.price)}</span>}</div>
           </div>);
       })()}
       {rows.length > PAGE && (
