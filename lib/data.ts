@@ -235,6 +235,13 @@ function aggregate(members: Member[], rowsByAcc: Map<number, any[]>, rules: Retu
   for (const t of traders) { if (t.failed) phases.failed++; else if (t.phase === 1) phases.p1++; else if (t.phase === 2) phases.p2++; else phases.funded++; }
   const plus = traders.filter(t => (t.pnl ?? 0) > 0).length, minus = traders.filter(t => (t.pnl ?? 0) < 0).length;
   const sortedDays = [...inP].sort((a, b) => b.pnl - a.pnl);
+  // Лучший трейдер каждого дня периода — для коллажа недели
+  const bestByDay: Record<string, { name: string; pct: number }> = {};
+  for (const m of members) for (const r of rowsByAcc.get(m.acc.id) || []) {
+    if (r.day < start || r.day > end) continue;
+    const pct = (Number(r.pnl) / Number(m.acc.initial_balance)) * 100;
+    if (pct > 0 && (!bestByDay[r.day] || pct > bestByDay[r.day].pct)) bestByDay[r.day] = { name: m.p.name, pct };
+  }
 
   const endIdx = upTo.length - 1;
   let chart = period === "all" ? upTo : upTo.slice(Math.max(0, endIdx + 1 - Math.max(45, inP.length + 10)));
@@ -249,7 +256,7 @@ function aggregate(members: Member[], rowsByAcc: Map<number, any[]>, rules: Retu
       plus, minus, flat: members.length - plus - minus, tradingDays: inP.length,
       bestDay: inP.length > 1 ? sortedDays[0] : null, worstDay: inP.length > 1 ? sortedDays[sortedDays.length - 1] : null,
     },
-    zones, phases, traders, chart, table: [...table].reverse(),
+    zones, phases, traders, chart, table: [...table].reverse(), bestByDay,
   };
 }
 

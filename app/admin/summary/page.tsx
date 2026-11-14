@@ -9,6 +9,7 @@ import { LEVEL_LABEL, PHASE_LABEL } from "@/lib/rules";
 import { GroupChart, Pill, cls, fmtD, sg } from "@/components/ui";
 import CopyReport from "@/components/CopyReport";
 import ShareImage, { type CardData } from "@/components/ShareImage";
+import WeekCollage, { type CollageData } from "@/components/WeekCollage";
 import ScopePicker from "@/components/ScopePicker";
 import RangePicker from "@/components/RangePicker";
 
@@ -78,6 +79,19 @@ export default async function Summary({ searchParams }: { searchParams: { day?: 
     phases: { p2: S.phases.p2, funded: S.phases.funded, failed: S.phases.failed },
   };
 
+  // Коллаж: неделя или свой период до 7 торговых дней
+  const wkDays = P === "week" || (P === "range" && sum.tradingDays <= 7) ? [...S.table].reverse().filter(r => r.day >= S.start && r.day <= S.end) : [];
+  const DOW = ["Вс", "Пн", "Вт", "Ср", "Чт", "Пт", "Сб"];
+  const bestBy = ((S as any).bestByDay || {}) as Record<string, { name: string; pct: number }>;
+  const collage: CollageData | null = wkDays.length >= 2 ? {
+    file: `matryoshka-kollazh-${isAll ? "" : S.scope.key + "-"}${S.key}`,
+    date: `${fmtD(S.start)}–${fmtD(S.end)}.${year}`, caption: (isAll ? "" : S.scope.short + " · ") + (P === "week" ? "за неделю" : "за период"),
+    heroLabel: P === "week" ? "Итог недели" : "Итог периода",
+    pnl: sum.pnl, pct: sum.pct, cum: sum.cum, cumPct: sum.cumPct, capital: S.capital,
+    days: wkDays.map(r => ({ dow: DOW[new Date(r.day + "T12:00:00Z").getUTCDay()], date: fmtD(r.day), pnl: r.pnl, pct: r.pct, plus: r.plus, minus: r.minus, trades: r.trades, best: bestBy[r.day]?.name ?? null, bestPct: bestBy[r.day]?.pct ?? null })),
+    trades: sum.trades, plus: sum.plus, minus: sum.minus, tradingDays: sum.tradingDays, accounts: S.count, failed: S.phases.failed,
+    zones: { green: S.zones.green, work: S.zones.work, yellow: S.zones.yellow, red: S.zones.red }, best: best ? `${best.name} ${sg(best.pnlPct!)}%` : null,
+  } : null;
   const noDays = (S as any).noDays === true;
   const OV = (<>
       {noDays ? <section className="panel"><p className="fine" style={{ margin: 0 }}>В периоде {fmtD(S.start)}–{fmtD(S.end)} нет торговых дней. Выберите другие даты.</p></section> : <>
@@ -228,6 +242,7 @@ export default async function Summary({ searchParams }: { searchParams: { day?: 
         </div>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-start", justifyContent: "flex-end" }}>
           <ShareImage data={card} />
+          {collage && <WeekCollage data={collage} />}
           <CopyReport text={report} />
         </div>
       </div>
