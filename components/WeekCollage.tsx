@@ -5,8 +5,8 @@ import { useState } from "react";
 export type CollageData = {
   file: string; date: string; caption: string; heroLabel: string;
   pnl: number; pct: number; cum: number; cumPct: number; capital: number;
-  days: { dow: string; date: string; pnl: number; pct: number; plus: number; minus: number; trades: number; best: string | null; bestPct: number | null }[];
-  trades: number; plus: number; minus: number; tradingDays: number; accounts: number; failed: number;
+  days: { dow: string; date: string; pnl: number; pct: number; plus: number; minus: number; trades: number; best: string | null; bestPct: number | null; failed: number }[];
+  trades: number; plus: number; minus: number; tradingDays: number; accounts: number; failed: number; failedIn: number;
   zones: { green: number; work: number; yellow: number; red: number }; best: string | null;
 };
 type Fmt = "post" | "story";
@@ -61,7 +61,7 @@ export async function drawCollage(d: CollageData, fmt: Fmt): Promise<HTMLCanvasE
   T(c, "0%", R, py(0) - 10, `500 17px ${MONO}`, C.muted, "right");
   // карточки дней
   y += ch + (st ? 90 : 44);
-  const n = d.days.length, gap = n > 5 ? 10 : 14, cw = (R - L - gap * (n - 1)) / n, cardH = st ? 620 : 420;
+  const n = d.days.length, gap = n > 5 ? 10 : 14, cw = (R - L - gap * (n - 1)) / n, cardH = st ? 620 : 450;
   d.days.forEach((x, i) => {
     const cx0 = L + i * (cw + gap), up = x.pnl >= 0;
     rr(c, cx0, y, cw, cardH, 18); c.fillStyle = up ? "rgba(47,208,122,.10)" : "rgba(240,86,90,.10)"; c.fill();
@@ -75,7 +75,14 @@ export async function drawCollage(d: CollageData, fmt: Fmt): Promise<HTMLCanvasE
     const wa = c.measureText(a).width, ws = c.measureText(sl).width, wb = c.measureText(b).width, s0 = cx - (wa + ws + wb) / 2;
     T(c, a, s0, yy, `700 24px ${MONO}`, C.green); T(c, sl, s0 + wa, yy, `700 24px ${MONO}`, C.fg); T(c, b, s0 + wa + ws, yy, `700 24px ${MONO}`, C.red); yy += 26;
     T(c, "плюс / минус", cx, yy, fit(c, "плюс / минус", `600 #px ${SANS}`, 15, cw - 12, 11), C.muted, "center"); yy += st ? 70 : 34;
-    T(c, `${x.trades} сд.`, cx, yy, `500 17px ${MONO}`, C.soft, "center"); yy += st ? 90 : 52;
+    T(c, `${x.trades} сд.`, cx, yy, `500 17px ${MONO}`, C.soft, "center");
+    // Вылетевшие в этот день — красная плашка под сделками
+    if (x.failed) {
+      const fy = yy + 14, s = `✕ вылетел${x.failed > 1 ? "и" : ""} ${x.failed}`;
+      rr(c, cx0 + 10, fy, cw - 20, 30, 8); c.fillStyle = "rgba(240,86,90,.22)"; c.fill();
+      T(c, s, cx, fy + 21, fit(c, s, `700 #px ${SANS}`, 16, cw - 30, 11), C.red, "center");
+    }
+    yy += st ? 130 : 82;
     if (x.best) {
       T(c, "лучший", cx, yy, `600 15px ${SANS}`, C.muted, "center"); yy += 28;
       T(c, x.best, cx, yy, fit(c, x.best, `700 #px ${MONO}`, 18, cw - 16, 11), C.fg, "center"); yy += 26;
@@ -84,14 +91,14 @@ export async function drawCollage(d: CollageData, fmt: Fmt): Promise<HTMLCanvasE
   });
   // итоги и зоны
   y += cardH + (st ? 90 : 40);
-  const tw = (R - L - 32) / 3, th = 112;
-  const tiles: [string, string, string][] = [["Сделок", String(d.trades), `${d.tradingDays} торг. дн.`], ["Плюс / минус", "", "трейдеров за период"], ["Счетов", String(d.accounts), `Failed · ${d.failed}`]];
+  const tw = (R - L - 48) / 4, th = 112;
+  const tiles: [string, string, string][] = [["Сделок", String(d.trades), `${d.tradingDays} торг. дн.`], ["Плюс / минус", "", "трейдеров"], ["Счетов", String(d.accounts), "в челлендже"], ["Failed", d.failedIn ? `+${d.failedIn}` : "0", `всего вылетело ${d.failed}`]];
   tiles.forEach(([k, v, f], i) => {
-    const x = L + i * (tw + 16); rr(c, x, y, tw, th, 16); c.fillStyle = C.card; c.fill(); c.strokeStyle = C.line2; c.lineWidth = 1.5; c.stroke();
+    const x = L + i * (tw + 16); const hot = k === "Failed" && d.failedIn > 0; rr(c, x, y, tw, th, 16); c.fillStyle = hot ? "rgba(240,86,90,.10)" : C.card; c.fill(); c.strokeStyle = hot ? "rgba(240,86,90,.45)" : C.line2; c.lineWidth = 1.5; c.stroke();
     T(c, k, x + 22, y + 36, `700 19px ${SANS}`, C.gold);
-    if (!v) { const wa = T(c, String(d.plus), x + 22, y + 80, `700 36px ${MONO}`, C.green); const ws = T(c, " / ", x + 22 + wa, y + 80, `700 36px ${MONO}`, C.fg); T(c, String(d.minus), x + 22 + wa + ws, y + 80, `700 36px ${MONO}`, C.red); }
-    else T(c, v, x + 22, y + 80, `700 36px ${MONO}`, C.fg);
-    T(c, f, x + 22, y + 102, `600 16px ${SANS}`, C.muted);
+    if (!v) { const wa = T(c, String(d.plus), x + 22, y + 80, `700 34px ${MONO}`, C.green); const ws = T(c, "/", x + 22 + wa, y + 80, `700 34px ${MONO}`, C.fg); T(c, String(d.minus), x + 22 + wa + ws, y + 80, `700 34px ${MONO}`, C.red); }
+    else T(c, v, x + 22, y + 80, `700 36px ${MONO}`, k === "Failed" && d.failedIn ? C.red : C.fg);
+    T(c, f, x + 22, y + 102, fit(c, f, `600 #px ${SANS}`, 16, tw - 30, 11), C.muted);
   });
   y += th + 34;
   const Z = d.zones, zt = Z.green + Z.work + Z.yellow + Z.red || 1;

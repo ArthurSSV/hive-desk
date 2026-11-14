@@ -219,8 +219,10 @@ function aggregate(members: Member[], rowsByAcc: Map<number, any[]>, rules: Retu
     const size = Number(acc.initial_balance);
     // Выбыл к концу периода: по нарушению лимита в наших расчётах или по сигналу cTrader (проп отключил торговлю)
     const failedBy = acc.status === "failed" && (all.some(r => r.breach && r.day <= end) || !(acc as any).status_day || String((acc as any).status_day) <= end);
+    // День вылета: нарушение лимита в наших расчётах, иначе день статуса (сигнал cTrader или отметка админа)
+    const failDay = acc.status === "failed" ? (all.find(r => r.breach)?.day as string | undefined) ?? ((acc as any).status_day ? String((acc as any).status_day) : null) : null;
     return {
-      id: p.id as string, name: p.name as string, team: p.team_id as number | null, phase: acc.phase, failed: failedBy, size,
+      id: p.id as string, name: p.name as string, team: p.team_id as number | null, phase: acc.phase, failed: failedBy, failDay, size,
       pnl: own.length ? pnl : null, pnlPct: own.length ? (pnl / size) * 100 : null,
       total: endRow ? Number(endRow.total_pct) : null, trades: own.reduce((a, r) => a + r.trades, 0),
       plusDays: own.filter(r => Number(r.pnl) > 0).length, minusDays: own.filter(r => Number(r.pnl) < 0).length,
@@ -235,6 +237,10 @@ function aggregate(members: Member[], rowsByAcc: Map<number, any[]>, rules: Retu
   for (const t of traders) { if (t.failed) phases.failed++; else if (t.phase === 1) phases.p1++; else if (t.phase === 2) phases.p2++; else phases.funded++; }
   const plus = traders.filter(t => (t.pnl ?? 0) > 0).length, minus = traders.filter(t => (t.pnl ?? 0) < 0).length;
   const sortedDays = [...inP].sort((a, b) => b.pnl - a.pnl);
+  // Вылетели в этом периоде и по дням
+  const failedByDay: Record<string, string[]> = {};
+  for (const t of traders) if (t.failDay && t.failDay >= start && t.failDay <= end) (failedByDay[t.failDay] ||= []).push(t.name);
+  const failedIn = Object.values(failedByDay).reduce((a, x) => a + x.length, 0);
   // Лучший трейдер каждого дня периода — для коллажа недели
   const bestByDay: Record<string, { name: string; pct: number }> = {};
   for (const m of members) for (const r of rowsByAcc.get(m.acc.id) || []) {
@@ -256,7 +262,7 @@ function aggregate(members: Member[], rowsByAcc: Map<number, any[]>, rules: Retu
       plus, minus, flat: members.length - plus - minus, tradingDays: inP.length,
       bestDay: inP.length > 1 ? sortedDays[0] : null, worstDay: inP.length > 1 ? sortedDays[sortedDays.length - 1] : null,
     },
-    zones, phases, traders, chart, table: [...table].reverse(), bestByDay,
+    zones, phases, traders, chart, table: [...table].reverse(), bestByDay, failedByDay, failedIn,
   };
 }
 

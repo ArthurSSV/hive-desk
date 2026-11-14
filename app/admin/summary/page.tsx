@@ -98,8 +98,8 @@ export default async function Summary({ searchParams }: { searchParams: { day?: 
     date: `${fmtD(S.start)}–${fmtD(S.end)}.${year}`, caption: (isAll ? "" : S.scope.short + " · ") + (P === "week" ? "за неделю" : "за период"),
     heroLabel: P === "week" ? "Итог недели" : "Итог периода",
     pnl: sum.pnl, pct: sum.pct, cum: sum.cum, cumPct: sum.cumPct, capital: S.capital,
-    days: wkDays.map(r => ({ dow: DOW[new Date(r.day + "T12:00:00Z").getUTCDay()], date: fmtD(r.day), pnl: r.pnl, pct: r.pct, plus: r.plus, minus: r.minus, trades: r.trades, best: bestBy[r.day]?.name ?? null, bestPct: bestBy[r.day]?.pct ?? null })),
-    trades: sum.trades, plus: sum.plus, minus: sum.minus, tradingDays: sum.tradingDays, accounts: S.count, failed: S.phases.failed,
+    days: wkDays.map(r => ({ dow: DOW[new Date(r.day + "T12:00:00Z").getUTCDay()], date: fmtD(r.day), pnl: r.pnl, pct: r.pct, plus: r.plus, minus: r.minus, trades: r.trades, best: bestBy[r.day]?.name ?? null, bestPct: bestBy[r.day]?.pct ?? null, failed: (((S as any).failedByDay || {})[r.day] || []).length })),
+    trades: sum.trades, plus: sum.plus, minus: sum.minus, tradingDays: sum.tradingDays, accounts: S.count, failed: S.phases.failed, failedIn: (S as any).failedIn || 0,
     zones: { green: S.zones.green, work: S.zones.work, yellow: S.zones.yellow, red: S.zones.red }, best: best ? `${best.name} ${sg(best.pnlPct!)}%` : null,
   } : null;
   const noDays = (S as any).noDays === true;
