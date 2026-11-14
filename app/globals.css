@@ -365,3 +365,35 @@ tbody.blocks tr.hl>td:nth-child(2){background:linear-gradient(90deg,rgba(232,181
 .rp-quick{display:flex;gap:6px;flex-wrap:wrap}
 .rp-quick button{all:unset;cursor:pointer;font-size:12px;font-weight:700;padding:5px 10px;border-radius:6px;border:1px solid var(--line2);color:var(--fg);background:var(--surface2)}
 .rp-quick button:hover{border-color:var(--gold-dim);color:var(--gold)} .rp-quick button:focus-visible{outline:2px solid var(--gold)}
+
+.an2c{grid-template-columns:repeat(2,minmax(0,1fr))} @media (max-width:860px){.an2c{grid-template-columns:1fr}}
+
+/* Сводка: риск-радар, дисциплина, воронка */
+.kpis{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px} @media (max-width:1100px){.kpis{grid-template-columns:repeat(3,minmax(0,1fr))}} @media (max-width:520px){.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.kpis>div{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 14px;min-width:0}
+.kpis .k{font-size:11.5px;color:var(--gold);font-weight:700} .kpis .v{font:700 22px var(--f-mono);margin-top:2px;white-space:nowrap} .kpis .s{font-size:11.5px;color:var(--muted);margin-top:2px}
+.rad{display:grid;gap:8px}
+.rad a{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:4px 14px;align-items:center;padding:12px 14px;border-radius:10px;background:var(--surface2);border:1px solid var(--line);text-decoration:none;color:inherit}
+.rad a:hover{border-color:var(--gold-dim)} .rad a:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+.rad a.u{border-left:3px solid var(--red)} .rad a.w{border-left:3px solid var(--amber)}
+.rad .lvl{font:800 10.5px var(--f-mono);letter-spacing:.06em;text-transform:uppercase;padding:2px 7px;border-radius:5px;white-space:nowrap}
+.rad .u .lvl{background:var(--red);color:#fff} .rad .w .lvl{background:var(--amber-bg);color:var(--amber)}
+.rad b{font-weight:800} .rad .why{display:flex;gap:6px;flex-wrap:wrap;margin-top:4px}
+.rad .why span{font-size:12px;padding:2px 8px;border-radius:12px;background:var(--sunk);border:1px solid var(--line2)}
+.rad .why span.r{color:var(--red);border-color:rgba(240,86,90,.4)} .rad .why span.a{color:var(--amber);border-color:rgba(240,169,58,.4)}
+.rad .num{font:700 13px var(--f-mono);text-align:right;white-space:nowrap}
+@media (max-width:600px){.rad a{grid-template-columns:1fr auto}.rad .lvl{grid-column:1 / -1;justify-self:start}}
+.note{display:flex;gap:8px 18px;flex-wrap:wrap;font-size:13px;color:var(--muted)} .note b{color:var(--fg)}
+.score{display:inline-flex;align-items:center;gap:8px;font:700 13px var(--f-mono)}
+.score i{display:block;width:60px;height:6px;border-radius:3px;background:var(--line);overflow:hidden} .score i b{display:block;height:100%}
+.thbtn{all:unset;cursor:pointer;font:inherit;color:inherit;letter-spacing:inherit;text-transform:inherit} .thbtn:hover{color:var(--gold)} .thbtn:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+th[aria-sort]{color:var(--gold)}
+.funnel{display:grid;gap:10px}
+.funnel .st2{display:grid;grid-template-columns:150px minmax(0,1fr) 70px;gap:12px;align-items:center}
+@media (max-width:600px){.funnel .st2{grid-template-columns:100px minmax(0,1fr) 54px}}
+.funnel .lb{font-weight:800;font-size:13.5px} .funnel .lb span{display:block;font-weight:500;font-size:11.5px;color:var(--muted)}
+.funnel .track{height:30px;border-radius:7px;background:var(--sunk);border:1px solid var(--line);overflow:hidden}
+.funnel .track i{display:flex;align-items:center;padding-left:10px;height:100%;font:700 12px var(--f-mono);color:var(--accent-ink);min-width:28px;box-sizing:border-box}
+.funnel .pc{font:700 13px var(--f-mono);text-align:right}
+.split{display:grid;grid-template-columns:minmax(0,3fr) minmax(0,2fr);gap:20px;align-items:start} @media (max-width:1000px){.split{grid-template-columns:1fr}}
+.ctabs .cnt.red{background:var(--red-bg);color:var(--red);border-color:rgba(240,86,90,.4)}

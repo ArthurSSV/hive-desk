@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { summarize, dayKey } from "./engine";
 import { normalizeRules, zoneOf } from "./rules";
+import { positionsOf, insightOf } from "./insights";
 
 export type Account = {
   id: number; user_id: string; ctid_trader_account_id: number; trader_login: number | null; broker_name: string | null;
@@ -156,8 +157,9 @@ export async function summaryBundle(sb: SupabaseClient, opts: { day?: string; pe
     if (!inR.length) return { ...base, empty: false as const, ...agg0(), noDays: true as const, key: `${f}_${t}`, start: f, end: t, label: periodLabel("range", period, f, t), anchor: t, prev: null, next: null, compare: [], first, last, from: f, to: t };
     const start = inR[0], end = inR[inR.length - 1];
     const agg = (ms: Member[]) => aggregate(ms, rowsByAcc, rules, period, start, end);
-    return { ...base, empty: false as const, ...agg(members), key: `${f}_${t}`, start, end, label: periodLabel("range", period, f, t), anchor: end, prev: null, next: null, compare: compareOf(agg), first, last, from: f, to: t };
+    return { ...base, empty: false as const, ...agg(members), accs: accsOf(members), allDays, key: `${f}_${t}`, start, end, label: periodLabel("range", period, f, t), anchor: end, prev: null, next: null, compare: compareOf(agg), first, last, from: f, to: t };
   }
+  function accsOf(ms: Member[]) { return ms.map(m => ({ uid: m.p.id as string, name: m.p.name as string, acc: m.acc })); }
   function agg0() { return aggregate([], rowsByAcc, rules, period, first, first); }
   const keys = [...new Set(allDays.map(d => periodKey(d, period)))];
   const anchor = opts.day && /^\d{4}-\d{2}-\d{2}$/.test(opts.day) ? opts.day : allDays[allDays.length - 1];
@@ -184,7 +186,7 @@ export async function summaryBundle(sb: SupabaseClient, opts: { day?: string; pe
     }).sort((x, y) => y.pct - x.pct);
   }
   return {
-    ...base, empty: false as const, ...main, first, last, from: start, to: end, noDays: false as const,
+    ...base, empty: false as const, ...main, accs: accsOf(members), allDays, first, last, from: start, to: end, noDays: false as const,
     key, start, end, label: periodLabel(key, period, start, end), anchor: end,
     prev: ki > 0 ? lastDayOf(keys[ki - 1]) : null, next: ki < keys.length - 1 ? lastDayOf(keys[ki + 1]) : null,
     compare,
@@ -249,4 +251,44 @@ function aggregate(members: Member[], rowsByAcc: Map<number, any[]>, rules: Retu
     },
     zones, phases, traders, chart, table: [...table].reverse(),
   };
+}
+
+/** Риск-радар, дисциплина, аналитика и воронка для «Сводки»: по выбранным трейдерам и периоду. */
+export async function groupInsights(sb: SupabaseClient, accs: { uid: string; name: string; acc: Account }[], start: string, end: string, allDays: string[], rules: ReturnType<typeof normalizeRules>) {
+  const ids = accs.map(a => a.acc.id), uids = accs.map(a => a.uid);
+  if (!ids.length) return null;
+  const today = allDays[allDays.length - 1];
+  // Сделки: за период и за последние 45 дней (для текущих серий), с запасом неделю на открытия позиций
+  const since = [start, new Date(Date.now() - 45 * 86400_000).toISOString().slice(0, 10)].sort()[0];
+  const sinceTs = new Date(Date.parse(since + "T00:00:00Z") - 7 * 86400_000).toISOString();
+  const [deals, meta, journal, rows] = await Promise.all([
+    fetchAll<any>(() => sb.from("deals").select("account_id,position_id,side,lots,volume,price,entry_price,conv,exec_ts,is_close,net_profit").in("account_id", ids).gte("exec_ts", sinceTs).order("exec_ts").order("deal_id")),
+    fetchAll<any>(() => sb.from("position_meta").select("account_id,position_id,sl,tp,close_reason,exits").in("account_id", ids).order("position_id")).catch(() => [] as any[]),
+    fetchAll<any>(() => sb.from("journal").select("user_id,day,plan").in("user_id", uids).gte("day", start).lte("day", end).order("day")),
+    fetchAll<any>(() => sb.from("daily_stats").select("account_id,day,trades,dd_pct,day_loss_pct,breach").in("account_id", ids).order("day").order("account_id")),
+  ]);
+  const by = <T extends Record<string, any>>(xs: T[], k: string) => { const m = new Map<any, T[]>(); for (const x of xs) { if (!m.has(x[k])) m.set(x[k], []); m.get(x[k])!.push(x); } return m; };
+  const dealsBy = by(deals, "account_id"), metaBy = by(meta, "account_id"), jBy = by(journal, "user_id"), rowsBy = by(rows, "account_id");
+  const inP = (ms: number) => { const d = dayKey(new Date(ms), rules.tz); return d >= start && d <= end; };
+  const people = accs.map(({ uid, name, acc }) => {
+    const init = Number(acc.initial_balance), all = positionsOf(dealsBy.get(acc.id) || [], metaBy.get(acc.id) || [], init);
+    const r = rowsBy.get(acc.id) || [], last = r[r.length - 1];
+    const traded = r.filter(x => x.trades > 0).map(x => x.day as string);
+    const lastTraded = traded[traded.length - 1];
+    const idleDays = lastTraded ? allDays.filter(d => d > lastTraded).length : allDays.filter(d => d >= String(acc.created_at).slice(0, 10)).length;
+    const failed = acc.status === "failed";
+    const ins = insightOf({ period: all.filter(p => inP(p.close)), recent: all, journal: (jBy.get(uid) || []) as any, tradedDays: traded.filter(d => d >= start && d <= end), idleDays, dd: Number(last?.dd_pct || 0), dayLoss: last?.day === today ? Number(last?.day_loss_pct || 0) : 0, rules });
+    const breach = [...r].reverse().find(x => x.breach)?.breach as string | undefined;
+    const reason = !failed ? null : (acc as any).manual_failed ? "manual" : breach === "daily" ? "daily" : breach === "max" ? "max" : "signal";
+    const fDay = failed ? String((acc as any).status_day || "") : "";
+    const life = failed && fDay ? allDays.filter(d => d >= String(acc.created_at).slice(0, 10) && d <= fDay).length : null;
+    return { uid, name, phase: acc.phase, failed, reason, life, ins };
+  });
+  // Сделки периода для общей аналитики: каждая помечена трейдером и размером его счёта
+  const initOf = new Map(accs.map(a => [a.acc.id, Number(a.acc.initial_balance)])), whoOf = new Map(accs.map(a => [a.acc.id, a.uid]));
+  const posOpen = new Map<string, number>();
+  for (const d of deals) if (d.is_close) { const k = d.account_id + ":" + d.position_id, ms = Date.parse(d.exec_ts); posOpen.set(k, Math.max(posOpen.get(k) || 0, ms)); }
+  const pDeals = deals.filter(d => { const c = posOpen.get(d.account_id + ":" + d.position_id); return c != null && inP(c); })
+    .map(d => ({ ...d, _who: whoOf.get(d.account_id), _init: initOf.get(d.account_id) }));
+  return { people, deals: pDeals, meta, capital: accs.reduce((a, x) => a + Number(x.acc.initial_balance), 0) };
 }

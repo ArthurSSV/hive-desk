@@ -1,6 +1,10 @@
 import Link from "next/link";
 import { requireAdmin } from "@/lib/supabase";
-import { summaryBundle, type Period } from "@/lib/data";
+import { summaryBundle, groupInsights, type Period } from "@/lib/data";
+import CabinetTabs from "@/components/CabinetTabs";
+import Analytics from "@/components/Analytics";
+import DisciplineTable, { type DRow } from "@/components/DisciplineTable";
+import { viewerTz } from "@/lib/tz";
 import { LEVEL_LABEL, PHASE_LABEL } from "@/lib/rules";
 import { GroupChart, Pill, cls, fmtD, sg } from "@/components/ui";
 import CopyReport from "@/components/CopyReport";
@@ -75,28 +79,7 @@ export default async function Summary({ searchParams }: { searchParams: { day?: 
   };
 
   const noDays = (S as any).noDays === true;
-  return (
-    <>
-      <div className="head">
-        <div>
-          <div className="titlerow"><h1>{isAll ? "Сводка группы" : `Сводка · ${S.scope.name}`}</h1><span className="count">{S.label.short}</span></div>
-          <p className="sub" style={{ textTransform: day ? "capitalize" : undefined }}>{S.label.long}{!day ? ` · торговых дней ${sum.tradingDays}` : ""}</p>
-          <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap", alignItems: "center" }}>
-            <nav className="seg2" aria-label="Период" style={{ marginRight: 4 }}>{TABS.map(([p, l]) => <Link key={p} href={href(p)} aria-current={p === P ? "page" : undefined}>{l}</Link>)}</nav>
-            <RangePicker from={S.from} to={S.to} min={S.first} max={S.last} active={P === "range"} base={rangeQ} />
-            {P !== "all" && P !== "range" && <>
-              {S.prev ? <Link className="btn ghost" href={href(P, S.prev)} aria-label="Предыдущий период">‹</Link> : <span className="btn ghost" aria-disabled="true" style={{ opacity: .35 }}>‹</span>}
-              {S.next ? <Link className="btn ghost" href={href(P, S.next)} aria-label="Следующий период">›</Link> : <span className="btn ghost" aria-disabled="true" style={{ opacity: .35 }}>›</span>}
-            </>}
-          </div>
-        </div>
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-start", justifyContent: "flex-end" }}>
-          <ShareImage data={card} />
-          <CopyReport text={report} />
-        </div>
-      </div>
-
-      {picker}
+  const OV = (<>
       {noDays ? <section className="panel"><p className="fine" style={{ margin: 0 }}>В периоде {fmtD(S.start)}–{fmtD(S.end)} нет торговых дней. Выберите другие даты.</p></section> : <>
       <section className="strip" aria-label="Итоги">
         <div><div className="k">Капитал в работе</div><div className="v">{money(S.capital)}</div><div className="fine">{S.count} счетов · баланс {money(S.balance)}</div></div>
@@ -171,6 +154,94 @@ export default async function Summary({ searchParams }: { searchParams: { day?: 
         </section>
       </div>
       </>}
+  </>);
+  const GI = noDays ? null : await groupInsights(sb, (S as any).accs || [], S.start, S.end, (S as any).allDays || [], S.rules);
+  const live = (GI?.people || []).filter(x => !x.failed);
+  const radar = live.filter(x => x.ins.why.length).sort((a, b) => Number(b.ins.urgent) - Number(a.ins.urgent) || b.ins.why.filter(w => w.lv === "r").length - a.ins.why.filter(w => w.lv === "r").length || b.ins.why.length - a.ins.why.length);
+  const urgentN = radar.filter(x => x.ins.urgent).length;
+  const totalOf = new Map(S.traders.map(t => [t.id, t.total]));
+  const avg = (xs: (number | null)[]) => { const v = xs.filter((x): x is number => x != null); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null; };
+  const kp = (k: string, v: string, c: string, sub: string) => <div key={k}><div className="k">{k}</div><div className={`v ${c}`}>{v}</div><div className="s">{sub}</div></div>;
+  const drows: DRow[] = live.map(x => ({ uid: x.uid, name: x.name, phase: x.phase, n: x.ins.n, score: x.ins.score, risk: x.ins.risk, cv: x.ins.cv, slPct: x.ins.slPct, avgR: x.ins.avgR, lotUpPct: x.ins.lotUpPct, planPct: x.ins.planPct, journalPct: x.ins.journalPct, res: totalOf.get(x.uid) ?? null }));
+  const all = GI?.people || [], started = all.length, failedP = all.filter(x => x.failed);
+  const reasons: [string, string, number][] = [["max", "Общая просадка", 0], ["daily", "Дневной лимит", 0], ["signal", "Проп отключил торговлю у границы лимита", 0], ["manual", "Отмечено вручную", 0]];
+  for (const f of failedP) { const r = reasons.find(x => x[0] === f.reason); if (r) r[2]++; }
+  const lifeAvg = avg(failedP.map(f => f.life));
+  const fewNote = (n: number) => n < 5 ? <span className="fine"> · мало данных</span> : null;
+
+  const radarTab = (
+    <section className="panel"><div className="ph"><h2>Кому нужна помощь</h2><span className="fine">текущее состояние · отсортировано по срочности · нажмите, чтобы открыть карточку</span></div>
+      <div className="note" style={{ marginBottom: 12 }}><span>Срочно: <b className="neg">{urgentN}</b></span><span>Внимание: <b style={{ color: "var(--amber)" }}>{radar.length - urgentN}</b></span><span>Всё спокойно: <b className="pos">{live.length - radar.length}</b></span></div>
+      {radar.length ? <div className="rad">{radar.map(x => (
+        <Link key={x.uid} href={`/admin/trader/${x.uid}`} className={x.ins.urgent ? "u" : "w"}>
+          <span className="lvl">{x.ins.urgent ? "срочно" : "внимание"}</span>
+          <div><b>{x.name}</b> <span className="fine">{x.phase === 3 ? "Funded" : `Фаза ${x.phase}`}{totalOf.get(x.uid) != null ? <> · результат <span className={cls(totalOf.get(x.uid)!)}>{sg(totalOf.get(x.uid)!)}%</span></> : null}</span>
+            <div className="why">{x.ins.why.map(w => <span key={w.t} className={w.lv}>{w.t}</span>)}</div></div>
+          <span className="num">{x.ins.score != null ? `балл ${x.ins.score}` : ""}</span>
+        </Link>))}</div> : <p className="fine" style={{ margin: 0 }}>Сейчас никому не нужна срочная помощь.</p>}
+      <p className="fine" style={{ margin: "12px 0 0" }}>Срочно — просадка от {S.rules.redDD}%, убыток за день от {S.rules.redDaily}%, 3+ стопа подряд. Внимание — лот после стопа растёт в 40%+ случаев, 2+ сделки без стопа, риск скачет, не торгует 3+ торговых дня, дневник меньше 40% дней. Пороги просадки и дневного убытка — из «Правил».</p>
+    </section>);
+  const discTab = (
+    <>
+      <div className="kpis">
+        {kp("Средний балл", avg(drows.map(r => r.score)) == null ? "—" : String(Math.round(avg(drows.map(r => r.score))!)), "", "дисциплина выборки")}
+        {kp("Риск на сделку", avg(drows.map(r => r.risk)) == null ? "—" : `${avg(drows.map(r => r.risk))!.toFixed(2)}%`, "", "в среднем")}
+        {kp("Со стопом", avg(drows.map(r => r.slPct)) == null ? "—" : `${Math.round(avg(drows.map(r => r.slPct))!)}%`, "", "доля сделок")}
+        {kp("Лот после стопа ↑", avg(drows.map(r => r.lotUpPct)) == null ? "—" : `${Math.round(avg(drows.map(r => r.lotUpPct))!)}%`, "neg", "как часто увеличивают")}
+        {kp("По плану", avg(drows.map(r => r.planPct)) == null ? "—" : `${Math.round(avg(drows.map(r => r.planPct))!)}%`, "", "по дневникам")}
+        {kp("Дневник", avg(drows.map(r => r.journalPct)) == null ? "—" : `${Math.round(avg(drows.map(r => r.journalPct))!)}%`, "", "торговых дней с записью")}
+      </div>
+      <section className="panel"><div className="ph"><h2>Дисциплина трейдеров {FOR[P]}</h2><span className="fine">нажмите на заголовок колонки, чтобы отсортировать</span></div>
+        <DisciplineTable rows={drows} />
+        <p className="fine" style={{ margin: "12px 0 0" }}>Балл 0–100: стоп на каждой сделке 30% · стабильный риск 20% · не увеличивает лот после стопа 20% · по плану 15% · ведёт дневник 15%. Если по какой-то части данных нет, она не штрафует. Результат в балл не входит — так видно, кто проходит за счёт системы, а кто за счёт удачи. «—» — нет данных за период.</p>
+      </section>
+    </>);
+  const anTab = GI && GI.deals.some(d => d.is_close) ? <Analytics group deals={GI.deals as any} initial={GI.capital} tz={viewerTz()} meta={GI.meta as any} /> : <section className="panel"><p className="fine" style={{ margin: 0 }}>За период нет закрытых сделок.</p></section>;
+  const funTab = (
+    <div className="split">
+      <section className="panel"><div className="ph"><h2>Воронка челленджа</h2><span className="fine">{S.scope.name} · текущий этап каждого счёта</span></div>
+        <div className="funnel">{([["Стартовали", "все с подключённым счётом", started, "var(--muted)"], ["Сейчас в Фазе 2 и дальше", "прошли Фазу 1", all.filter(x => !x.failed && x.phase >= 2).length, "var(--gold)"], ["Funded", "прошли Фазу 2", all.filter(x => !x.failed && x.phase >= 3).length, "var(--green)"], ["Failed", "выбыли на любом этапе", failedP.length, "var(--red)"]] as [string, string, number, string][]).map(([l, sub, n, c]) => (
+          <div key={l} className="st2"><div className="lb">{l}<span>{sub}</span></div><div className="track"><i style={{ width: `${started ? (n / started) * 100 : 0}%`, background: c }}>{n}</i></div><div className="pc">{started ? Math.round((n / started) * 100) : 0}%</div></div>))}</div>
+        <p className="fine" style={{ margin: "12px 0 0" }}>Процент — от всех стартовавших. Воронка показывает, где счета сейчас: история переходов между фазами появится, когда трейдеры начнут проходить фазы.</p></section>
+      <section className="panel"><div className="ph"><h2>Почему выбывают</h2><span className="fine">{failedP.length} {failedP.length === 1 ? "счёт" : "счетов"}</span></div>
+        {failedP.length ? <div className="an" style={{ gridTemplateColumns: "1fr" }}><div>{reasons.filter(r => r[2]).map(([k, l, n]) => (
+          <div className="r" key={k}><div className="l"><div><b>{l}</b> <span>· {n} тр.</span></div><em>{Math.round((n / failedP.length) * 100)}%</em></div><div className="b"><i style={{ width: `${(n / failedP.length) * 100}%`, background: k === "manual" ? "var(--amber)" : "var(--red)" }} /></div></div>))}</div></div>
+          : <p className="fine" style={{ margin: 0 }}>Пока никто не выбыл.</p>}
+        {lifeAvg != null && <div className="note" style={{ marginTop: 14 }}><span>До слива в среднем: <b>{Math.round(lifeAvg)} торг. дн.</b>{fewNote(failedP.length)}</span></div>}
+        {failedP.length > 0 && <p className="fine" style={{ margin: "10px 0 0" }}>Кто выбыл: {failedP.map(f => f.name).join(", ")}.</p>}
+      </section>
+    </div>);
+  return (
+    <>
+      <div className="head">
+        <div>
+          <div className="titlerow"><h1>{isAll ? "Сводка группы" : `Сводка · ${S.scope.name}`}</h1><span className="count">{S.label.short}</span></div>
+          <p className="sub" style={{ textTransform: day ? "capitalize" : undefined }}>{S.label.long}{!day ? ` · торговых дней ${sum.tradingDays}` : ""}</p>
+          <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap", alignItems: "center" }}>
+            <nav className="seg2" aria-label="Период" style={{ marginRight: 4 }}>{TABS.map(([p, l]) => <Link key={p} href={href(p)} aria-current={p === P ? "page" : undefined}>{l}</Link>)}</nav>
+            <RangePicker from={S.from} to={S.to} min={S.first} max={S.last} active={P === "range"} base={rangeQ} />
+            {P !== "all" && P !== "range" && <>
+              {S.prev ? <Link className="btn ghost" href={href(P, S.prev)} aria-label="Предыдущий период">‹</Link> : <span className="btn ghost" aria-disabled="true" style={{ opacity: .35 }}>‹</span>}
+              {S.next ? <Link className="btn ghost" href={href(P, S.next)} aria-label="Следующий период">›</Link> : <span className="btn ghost" aria-disabled="true" style={{ opacity: .35 }}>›</span>}
+            </>}
+          </div>
+        </div>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-start", justifyContent: "flex-end" }}>
+          <ShareImage data={card} />
+          <CopyReport text={report} />
+        </div>
+      </div>
+
+      {picker}
+      <CabinetTabs storageKey="sum-tab" initial="ov" tabs={[
+        { id: "ov", label: "Обзор", node: <>{OV}</> },
+        ...(GI ? [
+          { id: "radar", label: "Риск-радар", count: urgentN || undefined, countRed: true, node: radarTab },
+          { id: "disc", label: "Дисциплина", node: discTab },
+          { id: "an", label: "Аналитика", node: anTab },
+          { id: "fun", label: "Воронка", node: funTab },
+        ] : []),
+      ]} />
     </>
   );
 }

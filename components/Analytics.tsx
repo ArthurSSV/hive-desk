@@ -2,7 +2,7 @@
 // Аналитика счёта по закрытым позициям: дни недели, час входа, торговые сессии, время в сделке.
 import { useMemo, useState } from "react";
 
-type Deal = { position_id: number | null; exec_ts: string; net_profit: number; is_close: boolean; side?: string; lots?: number | null; volume?: number | null; price?: number | null; entry_price?: number | null; conv?: number | null };
+type Deal = { position_id: number | null; exec_ts: string; net_profit: number; is_close: boolean; side?: string; lots?: number | null; volume?: number | null; price?: number | null; entry_price?: number | null; conv?: number | null; _who?: string; _init?: number };
 type Meta = { position_id: number; sl: number | null; tp: number | null; close_reason: string | null; exits?: { ts: number; price: number | null; kind: string; sl?: number | null; tp?: number | null }[] | null };
 // Группы планового RR; группы риска подбираются под трейдера автоматически
 const MIN_N = 5; // меньше — «мало данных»
@@ -17,7 +17,7 @@ function riskBuckets(xs: number[]): [string, number][] {
 }
 const PART: Record<string, string> = { tp: "По тейку", sl: "По стопу", be: "Стоп в плюсе / б/у", stopout: "Стоп-аут", manual: "Вручную" };
 const RRG: [string, number][] = [["1:1", 1.25], ["1:1.5", 1.75], ["1:2–2.5", 2.75], ["1:3+", Infinity]];
-type Row = { k: string; n: number; w: number; pnl: number; ord: number };
+type Row = { k: string; n: number; w: number; pnl: number; ord: number; ppl: Set<string> };
 const WD = ["Воскресенье", "Понедельник", "Вторник", "Среда", "Четверг", "Пятница", "Суббота"];
 const WDI: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
 // Сессии заданы в UTC; в подписи часы пересчитываются в пояс того, кто смотрит
@@ -27,16 +27,17 @@ const cls = (v: number) => (v > 0 ? "pos" : v < 0 ? "neg" : "");
 const sgn = (v: number) => (v > 0 ? "+" : v < 0 ? "−" : "");
 const p2 = (n: number) => String(n).padStart(2, "0");
 
-export default function Analytics({ deals, initial, tz, meta = [] }: { deals: Deal[]; initial: number; tz: string; meta?: Meta[] }) {
+/** group — аналитика по группе: deals несут _who (трейдер) и _init (размер его счёта), initial — общий капитал. */
+export default function Analytics({ deals, initial, tz, meta = [], group: G = false }: { deals: Deal[]; initial: number; tz: string; meta?: Meta[]; group?: boolean }) {
   const [unit, setUnit] = useState<"usd" | "pct">("usd");
   const fmt = (v: number, short = false) => unit === "pct" ? `${sgn(v)}${Math.abs(initial ? (v / initial) * 100 : 0).toFixed(2)}%` : `${sgn(v)}$${Math.abs(v).toLocaleString("en-US", { maximumFractionDigits: short ? 0 : 2, minimumFractionDigits: short ? 0 : 2 })}`;
   const A = useMemo(() => {
     // Одна сделка = одна позиция: вход — первая открывающая сделка, результат — сумма всех частей
-    type P = { id: number; open: number | null; close: number; pnl: number; lots: number; vol: number; entry: number | null; buy: boolean; conv: number | null; parts: { ms: number; pnl: number }[] };
+    type P = { id: number; open: number | null; close: number; pnl: number; lots: number; vol: number; entry: number | null; buy: boolean; conv: number | null; parts: { ms: number; pnl: number }[]; who: string; init: number };
     const pos = new Map<number, P>();
     for (const d of deals) {
       if (d.position_id == null) continue;
-      const p = pos.get(d.position_id) || { id: d.position_id, open: null, close: 0, pnl: 0, lots: 0, vol: 0, entry: null, buy: true, conv: null, parts: [] }, ms = Date.parse(d.exec_ts);
+      const p = pos.get(d.position_id) || { id: d.position_id, open: null, close: 0, pnl: 0, lots: 0, vol: 0, entry: null, buy: true, conv: null, parts: [], who: d._who || "", init: d._init || initial }, ms = Date.parse(d.exec_ts);
       if (d.is_close) { p.parts.push({ ms, pnl: Number(d.net_profit || 0) }); p.pnl += Number(d.net_profit || 0); p.close = Math.max(p.close, ms); if (d.conv != null) p.conv = Number(d.conv); if (d.entry_price != null) p.entry = Number(d.entry_price); }
       else { if (p.open == null || ms < p.open) p.open = ms; p.lots += Number(d.lots || 0); p.vol += Number(d.volume || 0); p.buy = d.side === "buy"; if (p.entry == null && d.price != null) p.entry = Number(d.price); }
       pos.set(d.position_id, p);
@@ -48,22 +49,28 @@ export default function Analytics({ deals, initial, tz, meta = [] }: { deals: De
     const sessName = (utcH: number) => { const s = SESS.find(([, a, b]) => utcH >= a && utcH < b); return s ? `${s[0]} ${p2((s[1] + shift) % 24)}–${p2((s[2] + shift) % 24)}` : `Вне сессий ${p2((22 + shift) % 24)}–${p2((1 + shift) % 24)}`; };
     const group = (keyOf: (t: (typeof trades)[number]) => [string, number]) => {
       const m = new Map<string, Row>();
-      for (const t of trades) { const [k, ord] = keyOf(t); const g = m.get(k) || { k, n: 0, w: 0, pnl: 0, ord }; g.n++; if (t.pnl > 0) g.w++; g.pnl += t.pnl; m.set(k, g); }
+      for (const t of trades) { const [k, ord] = keyOf(t); const g = m.get(k) || { k, n: 0, w: 0, pnl: 0, ord, ppl: new Set<string>() }; g.n++; g.ppl.add(t.who); if (t.pnl > 0) g.w++; g.pnl += t.pnl; m.set(k, g); }
       return [...m.values()];
     };
     const byOrd = (a: Row, b: Row) => a.ord - b.ord, byPnl = (a: Row, b: Row) => b.pnl - a.pnl;
-    // ---- Серии: по позициям в порядке закрытия
+    // ---- Серии: по позициям в порядке закрытия; в группе — у каждого трейдера своя последовательность
     const seq = trades.map(t => t.pnl > 0);
-    let maxW = 0, maxL = 0, run = 0, prev: boolean | null = null;
-    for (const w of seq) { run = w === prev ? run + 1 : 1; prev = w; if (w) maxW = Math.max(maxW, run); else maxL = Math.max(maxL, run); }
+    const byWho = new Map<string, typeof trades>(); for (const t of trades) { if (!byWho.has(t.who)) byWho.set(t.who, []); byWho.get(t.who)!.push(t); }
+    let maxW = 0, maxL = 0, run = 0, prev: boolean | null = null, inStreak = 0;
+    for (const list of byWho.values()) {
+      let r = 0, pv: boolean | null = null;
+      for (const t of list) { const w = t.pnl > 0; r = w === pv ? r + 1 : 1; pv = w; if (w) maxW = Math.max(maxW, r); else maxL = Math.max(maxL, r); }
+      run = r; prev = pv; if (pv === false && r >= 3) inStreak++;
+    }
     const base = seq.length ? seq.filter(Boolean).length / seq.length : 0;
     const after = [0, 1, 2, 3].map(n => { let w = 0, t = 0;
-      for (let i = Math.max(1, n); i < seq.length; i++) {
-        const ok = n === 0 ? seq[i - 1] : seq.slice(i - n, i).every(x => !x) && (i - n === 0 || seq[i - n - 1]);
-        if (ok) { t++; if (seq[i]) w++; } }
+      for (const list of byWho.values()) { const s = list.map(x => x.pnl > 0);
+        for (let i = Math.max(1, n); i < s.length; i++) {
+          const ok = n === 0 ? s[i - 1] : s.slice(i - n, i).every(x => !x) && (i - n === 0 || s[i - n - 1]);
+          if (ok) { t++; if (s[i]) w++; } } }
       return { n, t, wr: t ? w / t : 0 }; });
     let up = 0, same = 0, down = 0;
-    for (let i = 1; i < trades.length; i++) if (trades[i - 1].pnl < 0 && trades[i - 1].lots && trades[i].lots) { const a = trades[i - 1].lots, b = trades[i].lots; if (b > a * 1.2) up++; else if (b < a * 0.8) down++; else same++; }
+    for (const list of byWho.values()) for (let i = 1; i < list.length; i++) if (list[i - 1].pnl < 0 && list[i - 1].lots && list[i].lots) { const a = list[i - 1].lots, b = list[i].lots; if (b > a * 1.2) up++; else if (b < a * 0.8) down++; else same++; }
     // ---- Стоп и RR: риск = |вход − стоп| × объём × курс, в % от начального баланса
     const mm = new Map(meta.map(m => [Number(m.position_id), m]));
     const withMeta = trades.filter(t => mm.has(t.id));
@@ -76,7 +83,7 @@ export default function Analytics({ deals, initial, tz, meta = [] }: { deals: De
       const sl = m.sl != null ? Number(m.sl) : closeSl != null && lossSide(Number(closeSl)) ? Number(closeSl) : null;
       const dist = sl != null && t.entry != null ? Math.abs(t.entry - sl) : null;
       const riskUsd = dist && t.vol && t.conv ? dist * (t.vol / 100) * t.conv : null;
-      const risk = riskUsd && initial ? (riskUsd / initial) * 100 : null;
+      const risk = riskUsd && t.init ? (riskUsd / t.init) * 100 : null;
       // Выходы: каждая часть позиции — по тейку, стопом в минус, стопом в плюсе (б/у), стоп-аутом или вручную.
       // Части сопоставляем с закрывающими ордерами по порядку; без данных о выходах — по причине закрытия и знаку результата.
       const parts = [...t.parts].sort((a, b) => a.ms - b.ms), ex = (m.exits || []).slice().sort((a, b) => a.ts - b.ts);
@@ -90,7 +97,7 @@ export default function Analytics({ deals, initial, tz, meta = [] }: { deals: De
       return { t, risk, plan, R: riskUsd ? t.pnl / riskUsd : null, parts: parts.map((p, i) => ({ pnl: p.pnl, kind: kinds[i] })) };
     });
     return {
-      seq, maxW, maxL, cur: run, curW: prev, base, after, lot: { up, same, down }, rr, metaN: withMeta.length,
+      seq, maxW, maxL, cur: run, curW: prev, inStreak, people: byWho.size, base, after, lot: { up, same, down }, rr, metaN: withMeta.length,
       n: trades.length, wins: trades.filter(t => t.pnl > 0).length,
       cards: [
         ["По дням недели", group(t => { const w = local(t.open).wd; return [WD[w], (w + 6) % 7]; }).sort(byOrd)],
@@ -121,16 +128,17 @@ export default function Analytics({ deals, initial, tz, meta = [] }: { deals: De
   const avgRisk = avg(withSL.map(x => x.risk!)), avgPlan = avg(A.rr.filter(x => x.plan != null).map(x => x.plan!)), avgR = avg(A.rr.filter(x => x.R != null).map(x => x.R!));
   const lt = A.lot.up + A.lot.same + A.lot.down || 1;
   const seriesBlock = A.n >= 3 && (
-    <section className="panel"><div className="ph"><h2>Серии</h2><span className="fine">по позициям, в порядке закрытия</span></div>
+    <section className="panel"><div className="ph"><h2>Серии</h2><span className="fine">{G ? "у каждого трейдера — по его сделкам, затем вместе" : "по позициям, в порядке закрытия"}</span></div>
       <div className="streaks">
-        <div><div className="k">Текущая серия</div><div className={`v ${A.curW ? "pos" : "neg"}`}>{A.cur} {A.curW ? "в плюс" : "в минус"}</div><div className="s">последние сделки подряд</div></div>
+        {G ? <div><div className="k">Сейчас в серии стопов</div><div className={`v ${A.inStreak ? "neg" : "pos"}`}>{A.inStreak} тр.</div><div className="s">3+ стопа подряд прямо сейчас</div></div>
+          : <div><div className="k">Текущая серия</div><div className={`v ${A.curW ? "pos" : "neg"}`}>{A.cur} {A.curW ? "в плюс" : "в минус"}</div><div className="s">последние сделки подряд</div></div>}
         <div><div className="k">Лучшая серия</div><div className="v pos">{A.maxW} в плюс</div><div className="s">подряд за фазу</div></div>
         <div><div className="k">Худшая серия</div><div className="v neg">{A.maxL} в минус</div><div className="s">подряд за фазу</div></div>
         <div><div className="k">Винрейт всех сделок</div><div className="v">{Math.round(A.base * 100)}%</div><div className="s">{A.n} позиций</div></div>
       </div>
-      <div className="an an3" style={{ marginTop: 14 }}>
-        <div><h3>Последние сделки подряд</h3><div className="beads">{A.seq.slice(-40).map((w, i) => <i key={i} className={w ? "w" : "l"} title={w ? "плюс" : "минус"} />)}</div>
-          <p className="fine" style={{ margin: "8px 0 0" }}>Зелёный — плюс, красный — минус. Новые справа.</p></div>
+      <div className={`an ${G ? "an2c" : "an3"}`} style={{ marginTop: 14 }}>
+        {!G && <div><h3>Последние сделки подряд</h3><div className="beads">{A.seq.slice(-40).map((w, i) => <i key={i} className={w ? "w" : "l"} title={w ? "плюс" : "минус"} />)}</div>
+          <p className="fine" style={{ margin: "8px 0 0" }}>Зелёный — плюс, красный — минус. Новые справа.</p></div>}
         <div><h3>Сделка после серии стопов</h3>{A.after.map(r => bar(r.n === 0 ? "После плюса" : `После ${r.n} ${r.n === 1 ? "стопа" : "стопов"} подряд`, `· ${r.t} сд`, r.t ? `${Math.round(r.wr * 100)}%` : "—", r.t ? (r.wr >= A.base ? "pos" : "neg") : "", r.wr * 100, r.wr >= A.base ? "green" : "red", r.t))}
           <p className="fine" style={{ margin: "8px 0 0" }}>Средний винрейт {Math.round(A.base * 100)}%. Красным — ниже среднего: после такой серии лучше остановиться.</p></div>
         <div><h3>Лот после стопа</h3>{([["Увеличил", A.lot.up, "red"], ["Тот же", A.lot.same, "green"], ["Уменьшил", A.lot.down, "green"]] as [string, number, string][]).map(([k, v, c]) => bar(k, `· ${v} раз`, `${Math.round((v / lt) * 100)}%`, c === "red" && v ? "neg" : "", (v / lt) * 100, c, A.lot.up + A.lot.same + A.lot.down))}
@@ -161,19 +169,19 @@ export default function Analytics({ deals, initial, tz, meta = [] }: { deals: De
   const hours = [...A.cards[1][1]].sort((a, b) => b.pnl - a.pnl), durs = A.cards[3][1];
   return (<>
     <section className="panel">
-      <div className="ph"><h2>Аналитика счёта</h2>
-        <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}><span className="fine">по закрытым позициям текущей фазы · время в вашем часовом поясе</span>
+      <div className="ph"><h2>{G ? "Аналитика группы" : "Аналитика счёта"}</h2>
+        <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}><span className="fine">{G ? "все закрытые позиции группы за период" : "по закрытым позициям текущей фазы"} · время в вашем часовом поясе</span>
           <span className="tfs" role="group" aria-label="Единицы">{(["usd", "pct"] as const).map(u => <button key={u} type="button" aria-pressed={unit === u} onClick={() => setUnit(u)}>{u === "usd" ? "$" : "%"}</button>)}</span></div></div>
       {!A.n ? <p className="fine">Аналитика появится после первых закрытых сделок.</p> : <>
         <div className="an-note">
-          <span>Сделок: <b>{A.n}</b> · в плюс <b>{Math.round((A.wins / A.n) * 100)}%</b></span>
+          <span>Сделок: <b>{A.n}</b>{G ? <> от <b>{A.people}</b> тр.</> : null} · в плюс <b>{Math.round((A.wins / A.n) * 100)}%</b></span>
           {hours.length > 1 && <><span>Лучший час входа: <b>{hours[0].k}</b> <span className={cls(hours[0].pnl)}>{fmt(hours[0].pnl, true)}</span></span>
             <span>Худший час: <b>{hours[hours.length - 1].k}</b> <span className={cls(hours[hours.length - 1].pnl)}>{fmt(hours[hours.length - 1].pnl, true)}</span></span></>}
           {durs.length > 1 && durs[0].pnl > 0 && <span>Лучше всего сделки: <b>{durs[0].k}</b></span>}
         </div>
         <div className="an">{A.cards.map(([title, rows]) => { const mx = Math.max(...rows.map(r => Math.abs(r.pnl)), 1); return (
           <div key={title}><h3>{title}</h3>{rows.map(r => (
-            bar(r.k, `· ${r.n} сд · ${Math.round((r.w / r.n) * 100)}%`, fmt(r.pnl), cls(r.pnl), (Math.abs(r.pnl) / mx) * 100, r.pnl >= 0 ? "green" : "red", r.n)))}</div>); })}</div>
+            bar(r.k, `· ${r.n} сд${G ? ` · ${r.ppl.size} тр.` : ""} · ${Math.round((r.w / r.n) * 100)}%`, fmt(r.pnl), cls(r.pnl), (Math.abs(r.pnl) / mx) * 100, r.pnl >= 0 ? "green" : "red", r.n)))}</div>); })}</div>
         <p className="fine" style={{ margin: "12px 0 0" }}>«сд» — число позиций (позиция, закрытая частями, считается одной), процент — доля прибыльных. Серые строки — меньше 5 сделок, выводы по ним ненадёжны.</p>
       </>}
     </section>
