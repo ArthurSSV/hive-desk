@@ -397,3 +397,36 @@ th[aria-sort]{color:var(--gold)}
 .funnel .pc{font:700 13px var(--f-mono);text-align:right}
 .split{display:grid;grid-template-columns:minmax(0,3fr) minmax(0,2fr);gap:20px;align-items:start} @media (max-width:1000px){.split{grid-template-columns:1fr}}
 .ctabs .cnt.red{background:var(--red-bg);color:var(--red);border-color:rgba(240,86,90,.4)}
+
+/* ---------- PDF: печать страницы ---------- */
+.printhead{display:none}
+.pmenu{position:absolute;right:0;top:calc(100% + 6px);z-index:30;width:240px;display:grid;gap:4px;padding:8px;border-radius:12px;background:var(--surface);border:1px solid var(--gold-dim);box-shadow:0 14px 40px var(--shadow)}
+.pmenu button{all:unset;cursor:pointer;display:grid;padding:8px 10px;border-radius:8px} .pmenu button:hover,.pmenu button:focus-visible{background:var(--surface2)}
+.pmenu b{font-weight:800} .pmenu span{font-size:12px;color:var(--muted)} .pmenu p{margin:4px 10px 2px}
+@page{size:A4;margin:12mm 10mm 14mm}
+@media print{
+  html,body{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  body{background-image:none!important}
+  header.top,.noprint,.ctabs,.seg2,.tfs,.btn,.linkbtn,form,dialog,[role="dialog"]{display:none!important}
+  .wrap{max-width:none!important;padding:0!important}
+  main{padding:0!important;gap:12px!important}
+  .printhead{display:flex!important;justify-content:space-between;gap:12px;align-items:center;font-size:11px;color:var(--muted);border-bottom:1px solid var(--line2);padding-bottom:6px}
+  .printhead .brand{font-size:13px;font-weight:800;color:var(--gold)}
+  .strip,.kpis{grid-template-columns:repeat(3,1fr)!important;gap:8px!important}
+  .strip .v,.kpis .v{font-size:22px!important;white-space:nowrap}
+  .grid2,.split,.row-cur,.jgrid{grid-template-columns:1fr!important}
+  .tablewrap{overflow:visible!important;max-height:none!important;margin:0!important;padding:0!important}
+  table{min-width:0!important;font-size:11px}
+  th,td{padding:5px 6px!important}
+  .panel{box-shadow:none!important;padding:12px 14px!important}
+  .panel,svg,tr,.strip>div,.kpis>div,.rad a,.an>div{break-inside:avoid}
+  .panel:has(table){break-inside:auto}
+  thead{display:table-header-group}
+  a{color:inherit!important;text-decoration:none!important}
+}
+:root[data-print="light"]{--bg:#FFFFFF;--surface:#FFFFFF;--surface2:#FAF6EC;--sunk:#F6F0E2;--line:#E4D9C1;--line2:#CDBF9F;--fg:#1D180E;--muted:#6E6450;--gold:#8A5F08;--gold2:#6E4A04;--gold-dim:#C29B45;--accent-ink:#FFFFFF;--red:#BE2B2A;--red-bg:rgba(190,43,42,.10);--amber:#9A5C06;--amber-bg:rgba(154,92,6,.12);--green:#0F7A44;--green-bg:rgba(15,122,68,.10);--grey-bg:#EEE7D6;color-scheme:light}
+:root[data-print="light"] body{background:#fff!important;background-image:none!important}
+:root[data-print="light"] .panel{background:#fff!important;border:1px solid #D9CBA7!important}
+:root[data-print="light"] td{color:#2A2416}
+:root[data-print="light"] tr.dead>td{background:rgba(190,43,42,.06)!important}
+:root[data-print="light"] .l-failed{color:#fff} :root[data-print="light"] .l-failed .dot{background:#fff}

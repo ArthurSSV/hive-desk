@@ -10,6 +10,7 @@ import { GroupChart, Pill, cls, fmtD, sg } from "@/components/ui";
 import CopyReport from "@/components/CopyReport";
 import ShareImage, { type CardData } from "@/components/ShareImage";
 import WeekCollage, { type CollageData } from "@/components/WeekCollage";
+import PrintPdf from "@/components/PrintPdf";
 import ScopePicker from "@/components/ScopePicker";
 import RangePicker from "@/components/RangePicker";
 
@@ -237,6 +238,7 @@ export default async function Summary({ searchParams }: { searchParams: { day?: 
     </div>);
   return (
     <>
+      <div className="printhead"><span className="brand">Матрёшка — Челлендж</span><span>{isAll ? "Сводка группы" : `Сводка · ${S.scope.name}`} · {titleFor} · <span id="printstamp" /></span></div>
       <div className="head">
         <div>
           <div className="titlerow"><h1>{isAll ? "Сводка группы" : `Сводка · ${S.scope.name}`}</h1><span className="count">{S.label.short}</span></div>
@@ -253,6 +255,7 @@ export default async function Summary({ searchParams }: { searchParams: { day?: 
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-start", justifyContent: "flex-end" }}>
           <ShareImage data={card} />
           {collage && <WeekCollage data={collage} />}
+          <PrintPdf />
           <CopyReport text={report} />
         </div>
       </div>
