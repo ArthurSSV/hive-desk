@@ -6,23 +6,24 @@ import { GroupChart, Pill, cls, fmtD, sg } from "@/components/ui";
 import CopyReport from "@/components/CopyReport";
 import ShareImage, { type CardData } from "@/components/ShareImage";
 import ScopePicker from "@/components/ScopePicker";
+import RangePicker from "@/components/RangePicker";
 
 export const dynamic = "force-dynamic";
 
 const money = (v: number, signed = false) => (signed ? (v > 0 ? "+" : v < 0 ? "−" : "") : v < 0 ? "−" : "") + "$" + Math.abs(Math.round(v)).toLocaleString("en-US");
 const TABS: [Period, string][] = [["day", "День"], ["week", "Неделя"], ["month", "Месяц"], ["all", "Всё время"]];
-const FOR: Record<Period, string> = { day: "за день", week: "за неделю", month: "за месяц", all: "за всё время" };
+const FOR: Record<Period, string> = { day: "за день", week: "за неделю", month: "за месяц", all: "за всё время", range: "за период" };
 
-export default async function Summary({ searchParams }: { searchParams: { day?: string; period?: string; scope?: string; u?: string | string[] } }) {
+export default async function Summary({ searchParams }: { searchParams: { day?: string; period?: string; scope?: string; u?: string | string[]; from?: string; to?: string } }) {
   const { sb } = await requireAdmin();
   const u = searchParams.u == null ? [] : Array.isArray(searchParams.u) ? searchParams.u : [searchParams.u];
-  const S = await summaryBundle(sb, { day: searchParams.day, period: searchParams.period, scope: searchParams.scope, pick: u });
+  const S = await summaryBundle(sb, { day: searchParams.day, period: searchParams.period, scope: searchParams.scope, pick: u, from: searchParams.from, to: searchParams.to });
   if (S.empty) return (
     <div className="head"><div><h1>Сводка группы</h1><p className="sub">Сводка появится, когда хотя бы один трейдер подключит счёт и укажет начальный баланс.</p></div></div>
   );
   const scopeQ = `&scope=${S.scope.key}${S.scope.key === "pick" ? S.pick.map(i => `&u=${i}`).join("") : ""}`;
   const scopeOpts = [{ key: "all", label: "Вся группа" }, ...S.teams.map(t => ({ key: "team-" + t.id, label: t.name })), ...(S.teams.length && S.picker.some(p => !p.team) ? [{ key: "none", label: "Без команды" }] : [])];
-  const picker = <ScopePicker options={scopeOpts} current={S.scope.key} people={S.picker} teams={S.teams} pick={S.pick} base={`/admin/summary?period=${S.period}&day=${S.anchor}`} />;
+  const picker = <ScopePicker options={scopeOpts} current={S.scope.key} people={S.picker} teams={S.teams} pick={S.pick} base={S.period === "range" ? `/admin/summary?period=range&from=${S.from}&to=${S.to}` : `/admin/summary?period=${S.period}&day=${S.anchor}`} />;
   const isAll = S.scope.key === "all";
   if (!S.count) return (
     <>
@@ -35,7 +36,8 @@ export default async function Summary({ searchParams }: { searchParams: { day?: 
   const best = S.traders.find(t => (t.pnl ?? 0) > 0);
   const worst = [...S.traders].reverse().find(t => (t.pnl ?? 0) < 0);
   const attention = S.traders.filter(t => t.zone === "red" || t.zone === "yellow");
-  const titleFor = day ? `за ${S.label.short}` : P === "all" ? "за всё время" : `${FOR[P]} ${S.label.short}`;
+  const titleFor = day ? `за ${S.label.short}` : P === "all" ? "за всё время" : P === "range" ? `за ${S.label.short}` : `${FOR[P]} ${S.label.short}`;
+  const rangeQ = `/admin/summary?x=1${scopeQ}`;
   const year = S.end.slice(0, 4);
 
   const report = [
@@ -54,7 +56,7 @@ export default async function Summary({ searchParams }: { searchParams: { day?: 
 
   const card: CardData = {
     file: `matryoshka-svodka-${isAll ? "" : S.scope.key + "-"}${P}-${S.key}`,
-    caption: (isAll ? "" : S.scope.short + " · ") + (day ? (isAll ? "Сводка группы" : "сводка") : P === "all" ? "за всё время" : P === "week" ? "за неделю" : "за месяц"),
+    caption: (isAll ? "" : S.scope.short + " · ") + (day ? (isAll ? "Сводка группы" : "сводка") : P === "all" ? "за всё время" : P === "week" ? "за неделю" : P === "range" ? "за период" : "за месяц"),
     heroLabel: isAll ? "Итог группы" : S.scope.key.startsWith("team-") ? "Итог команды" : "Итог выборки",
     date: day ? `${fmtD(S.end)}.${year}` : P === "month" ? S.label.short : `${fmtD(S.start)}–${fmtD(S.end)}.${year}`,
     heroPct: sum.cumPct, heroUsd: sum.cum, capital: S.capital,
@@ -62,7 +64,7 @@ export default async function Summary({ searchParams }: { searchParams: { day?: 
     tiles: [
       P === "all"
         ? { k: "Торговых дней", v: String(sum.tradingDays), f: `сделок ${sum.trades}` }
-        : { k: day ? "За день" : P === "week" ? "За неделю" : "За месяц", v: money(sum.pnl, true), f: `${sg(sum.pct)}% к капиталу`, tone: sum.pnl > 0 ? "pos" : sum.pnl < 0 ? "neg" : "" },
+        : { k: day ? "За день" : P === "week" ? "За неделю" : P === "range" ? "За период" : "За месяц", v: money(sum.pnl, true), f: `${sg(sum.pct)}% к капиталу`, tone: sum.pnl > 0 ? "pos" : sum.pnl < 0 ? "neg" : "" },
       { k: "Плюс / минус", v: "", f: `без сделок ${sum.flat}`, parts: [{ t: String(sum.plus), tone: "pos" }, { t: " / ", tone: "" }, { t: String(sum.minus), tone: "neg" }] },
       P === "all" ? { k: "Капитал", v: money(S.capital), f: `баланс ${money(S.balance)}` } : { k: "Сделок", v: String(sum.trades), f: day ? "за день" : `${sum.tradingDays} торг. дн.` },
       { k: "Счетов", v: String(S.count), f: `Фаза 1 · ${S.phases.p1}` },
@@ -72,6 +74,7 @@ export default async function Summary({ searchParams }: { searchParams: { day?: 
     phases: { p2: S.phases.p2, funded: S.phases.funded, failed: S.phases.failed },
   };
 
+  const noDays = (S as any).noDays === true;
   return (
     <>
       <div className="head">
@@ -80,7 +83,8 @@ export default async function Summary({ searchParams }: { searchParams: { day?: 
           <p className="sub" style={{ textTransform: day ? "capitalize" : undefined }}>{S.label.long}{!day ? ` · торговых дней ${sum.tradingDays}` : ""}</p>
           <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap", alignItems: "center" }}>
             <nav className="seg2" aria-label="Период" style={{ marginRight: 4 }}>{TABS.map(([p, l]) => <Link key={p} href={href(p)} aria-current={p === P ? "page" : undefined}>{l}</Link>)}</nav>
-            {P !== "all" && <>
+            <RangePicker from={S.from} to={S.to} min={S.first} max={S.last} active={P === "range"} base={rangeQ} />
+            {P !== "all" && P !== "range" && <>
               {S.prev ? <Link className="btn ghost" href={href(P, S.prev)} aria-label="Предыдущий период">‹</Link> : <span className="btn ghost" aria-disabled="true" style={{ opacity: .35 }}>‹</span>}
               {S.next ? <Link className="btn ghost" href={href(P, S.next)} aria-label="Следующий период">›</Link> : <span className="btn ghost" aria-disabled="true" style={{ opacity: .35 }}>›</span>}
             </>}
@@ -93,7 +97,7 @@ export default async function Summary({ searchParams }: { searchParams: { day?: 
       </div>
 
       {picker}
-
+      {noDays ? <section className="panel"><p className="fine" style={{ margin: 0 }}>В периоде {fmtD(S.start)}–{fmtD(S.end)} нет торговых дней. Выберите другие даты.</p></section> : <>
       <section className="strip" aria-label="Итоги">
         <div><div className="k">Капитал в работе</div><div className="v">{money(S.capital)}</div><div className="fine">{S.count} счетов · баланс {money(S.balance)}</div></div>
         <div><div className="k">Итог группы</div><div className={`v ${cls(sum.cum)}`}>{money(sum.cum, true)}</div><div className={`fine ${cls(sum.cumPct)}`}>{sg(sum.cumPct)}% от капитала{!day ? ` на ${fmtD(S.end)}` : ""}</div></div>
@@ -166,6 +170,7 @@ export default async function Summary({ searchParams }: { searchParams: { day?: 
           </table></div>
         </section>
       </div>
+      </>}
     </>
   );
 }

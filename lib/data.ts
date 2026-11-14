@@ -88,16 +88,17 @@ export async function groupBundle(sb: SupabaseClient) {
   return { traders, teams, temp: [...temp.values()].sort((a, b) => a.day.localeCompare(b.day)).slice(-22), rules };
 }
 
-export type Period = "day" | "week" | "month" | "all";
+export type Period = "day" | "week" | "month" | "all" | "range";
 const MONTHS = ["Январь", "Февраль", "Март", "Апрель", "Май", "Июнь", "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"];
 const dd = (d: string) => d.slice(8, 10) + "." + d.slice(5, 7);
 function addDays(d: string, n: number) { const x = new Date(d + "T12:00:00Z"); x.setUTCDate(x.getUTCDate() + n); return x.toISOString().slice(0, 10); }
 function weekStart(d: string) { const wd = (new Date(d + "T12:00:00Z").getUTCDay() + 6) % 7; return addDays(d, -wd); }
-export function periodKey(d: string, p: Period) { return p === "day" ? d : p === "week" ? weekStart(d) : p === "month" ? d.slice(0, 7) : "all"; }
+export function periodKey(d: string, p: Period) { return p === "day" ? d : p === "week" ? weekStart(d) : p === "month" ? d.slice(0, 7) : p === "range" ? "range" : "all"; }
 function periodLabel(key: string, p: Period, first: string, last: string) {
   if (p === "day") return { short: dd(key), long: new Date(key + "T12:00:00Z").toLocaleDateString("ru-RU", { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" }) };
   if (p === "week") return { short: `${dd(key)}–${dd(addDays(key, 6))}`, long: `Неделя ${dd(key)}–${dd(addDays(key, 6))}.${key.slice(0, 4)}` };
   if (p === "month") { const m = `${MONTHS[Number(key.slice(5, 7)) - 1]} ${key.slice(0, 4)}`; return { short: m, long: m }; }
+  if (p === "range") return { short: `${dd(first)}–${dd(last)}`, long: `Период ${dd(first)}.${first.slice(0, 4)}–${dd(last)}.${last.slice(0, 4)}` };
   return { short: "Всё время", long: `С ${dd(first)}.${first.slice(0, 4)} по ${dd(last)}.${last.slice(0, 4)}` };
 }
 
@@ -105,8 +106,10 @@ export type Team = { id: number; name: string; curator: string | null };
 type Member = { p: any; acc: Account };
 
 /** Сводка за день, неделю, месяц или всё время — по всей группе, по команде или по выбранным трейдерам. */
-export async function summaryBundle(sb: SupabaseClient, opts: { day?: string; period?: string; scope?: string; pick?: string[] } = {}) {
-  const period: Period = (["day", "week", "month", "all"] as const).includes(opts.period as Period) ? (opts.period as Period) : "day";
+export async function summaryBundle(sb: SupabaseClient, opts: { day?: string; period?: string; scope?: string; pick?: string[]; from?: string; to?: string } = {}) {
+  const isD = (s?: string) => !!s && /^\d{4}-\d{2}-\d{2}$/.test(s);
+  let period: Period = (["day", "week", "month", "all", "range"] as const).includes(opts.period as Period) ? (opts.period as Period) : "day";
+  if (period === "range" && !(isD(opts.from) && isD(opts.to))) period = "week";
   const [{ data: profiles }, { data: accounts }, { data: teamRows }, rules] = await Promise.all([
     sb.from("profiles").select("*").or("role.eq.trader,is_trader.eq.true").order("created_at"),
     sb.from("ctrader_accounts").select("*"),
@@ -145,6 +148,17 @@ export async function summaryBundle(sb: SupabaseClient, opts: { day?: string; pe
   const allDays = [...new Set(rows.map(r => r.day as string))].sort();
   const base = { period, rules, teams, scope, picker: allMembers.map(m => ({ id: m.p.id as string, name: m.p.name as string, team: teamOf(m) })), pick: [...pick] };
   if (!allDays.length) return { ...base, empty: true as const, count: members.length };
+  const first = allDays[0], last = allDays[allDays.length - 1];
+  // Свой период: торговые дни между «с» и «по» включительно
+  if (period === "range") {
+    let [f, t] = [opts.from!, opts.to!]; if (f > t) [f, t] = [t, f];
+    const inR = allDays.filter(d => d >= f && d <= t);
+    if (!inR.length) return { ...base, empty: false as const, ...agg0(), noDays: true as const, key: `${f}_${t}`, start: f, end: t, label: periodLabel("range", period, f, t), anchor: t, prev: null, next: null, compare: [], first, last, from: f, to: t };
+    const start = inR[0], end = inR[inR.length - 1];
+    const agg = (ms: Member[]) => aggregate(ms, rowsByAcc, rules, period, start, end);
+    return { ...base, empty: false as const, ...agg(members), key: `${f}_${t}`, start, end, label: periodLabel("range", period, f, t), anchor: end, prev: null, next: null, compare: compareOf(agg), first, last, from: f, to: t };
+  }
+  function agg0() { return aggregate([], rowsByAcc, rules, period, first, first); }
   const keys = [...new Set(allDays.map(d => periodKey(d, period)))];
   const anchor = opts.day && /^\d{4}-\d{2}-\d{2}$/.test(opts.day) ? opts.day : allDays[allDays.length - 1];
   let key = periodKey(anchor, period);
@@ -157,17 +171,20 @@ export async function summaryBundle(sb: SupabaseClient, opts: { day?: string; pe
   const agg = (ms: Member[]) => aggregate(ms, rowsByAcc, rules, period, start, end);
   const main = agg(members);
 
-  // Сравнение команд за тот же период
-  const groups: { key: string; name: string; curator: string | null; ms: Member[] }[] = teams.map(t => ({ key: "team-" + t.id, name: t.name, curator: t.curator, ms: allMembers.filter(m => teamOf(m) === t.id) }));
-  const loose = allMembers.filter(m => !teamOf(m));
-  if (teams.length && loose.length) groups.push({ key: "none", name: "Без команды", curator: null, ms: loose });
-  const compare = groups.map(g => {
-    const a = agg(g.ms);
-    return { key: g.key, name: g.name, curator: g.curator, count: g.ms.length, capital: a.capital, pnl: a.sum.pnl, pct: a.sum.pct, cum: a.sum.cum, cumPct: a.sum.cumPct, plus: a.sum.plus, minus: a.sum.minus, zones: a.zones, phases: a.phases };
-  }).sort((x, y) => y.pct - x.pct);
+  const compare = compareOf(agg);
 
+  // Сравнение команд за тот же период
+  function compareOf(agg: (ms: Member[]) => ReturnType<typeof aggregate>) {
+    const groups: { key: string; name: string; curator: string | null; ms: Member[] }[] = teams.map(t => ({ key: "team-" + t.id, name: t.name, curator: t.curator, ms: allMembers.filter(m => teamOf(m) === t.id) }));
+    const loose = allMembers.filter(m => !teamOf(m));
+    if (teams.length && loose.length) groups.push({ key: "none", name: "Без команды", curator: null, ms: loose });
+    return groups.map(g => {
+      const a = agg(g.ms);
+      return { key: g.key, name: g.name, curator: g.curator, count: g.ms.length, capital: a.capital, pnl: a.sum.pnl, pct: a.sum.pct, cum: a.sum.cum, cumPct: a.sum.cumPct, plus: a.sum.plus, minus: a.sum.minus, zones: a.zones, phases: a.phases };
+    }).sort((x, y) => y.pct - x.pct);
+  }
   return {
-    ...base, empty: false as const, ...main,
+    ...base, empty: false as const, ...main, first, last, from: start, to: end, noDays: false as const,
     key, start, end, label: periodLabel(key, period, start, end), anchor: end,
     prev: ki > 0 ? lastDayOf(keys[ki - 1]) : null, next: ki < keys.length - 1 ? lastDayOf(keys[ki + 1]) : null,
     compare,
