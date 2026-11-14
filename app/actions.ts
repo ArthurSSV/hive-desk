@@ -164,6 +164,15 @@ export async function adminAccountAction(fd: FormData) {
     await sb.from("ctrader_accounts").delete().eq("id", id);
   } else if (act === "reject") {
     await sb.from("ctrader_accounts").update({ delete_requested_at: null }).eq("id", id);
+  } else if (act === "fail" || act === "unfail") {
+    // Ручная отметка Failed: колонка появляется после миграции 011
+    const { error } = await sb.from("ctrader_accounts").update({ manual_failed: act === "fail" }).eq("id", id);
+    if (error) redirect(`/admin/trader/${user}?e=migrate`);
+    try {
+      const rules = await loadRules(sb);
+      const { data: a } = await sb.from("ctrader_accounts").select("*").eq("id", id).single();
+      if (a?.initial_balance != null) await recompute(sb, a, rules, Number(a.initial_balance));
+    } catch { /* пересчитает ближайшая синхронизация */ }
   }
   revalidatePath(`/admin/trader/${user}`); revalidatePath("/admin");
   redirect(`/admin/trader/${user}?ok=${act}`);

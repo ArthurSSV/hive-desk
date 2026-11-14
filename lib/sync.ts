@@ -8,7 +8,7 @@ import { sendTelegram } from "./telegram";
 
 type Account = {
   id: number; user_id: string; ctid_trader_account_id: number; is_live: boolean; phase: number;
-  initial_balance: number | null; status: string; created_at: string; access_rights?: string | null;
+  initial_balance: number | null; status: string; created_at: string; access_rights?: string | null; manual_failed?: boolean | null; status_day?: string | null;
 };
 
 const HISTORY_DAYS = 120;
@@ -149,13 +149,22 @@ export async function recompute(sb: SupabaseClient, acc: Account, rules: Rules, 
   for (let i = 0; i < rows.length; i += 500) { const { error } = await sb.from("daily_stats").insert(rows.slice(i, i + 500)); if (error) throw error; }
   // Сигнал от самого cTrader: проп отключил торговлю. По нашим расчётам счёт ещё «жив»
   // (минутные свечи могли не поймать касание лимита) — доверяем брокеру.
+  // Но одного сигнала мало: на выходных проп переводит в «только закрытие» ВСЕ счета.
+  // Поэтому Failed по сигналу — только если счёт был у самой границы лимита (в пределах 0.5%),
+  // и на выходных новых Failed по сигналу не ставим (уже поставленный в будни — сохраняем).
   const access = acc.access_rights || "full", lastDay = res.days[res.days.length - 1];
+  const lastTradedRow = [...res.days].reverse().find(d => d.traded);
+  const lastTraded = lastTradedRow?.day ?? lastDay?.day ?? today;
   if (res.status === "active" && access !== "full" && lastDay) {
     const target = acc.phase === 1 ? rules.p1 : acc.phase === 2 ? rules.p2 : null;
-    const lastTraded = [...res.days].reverse().find(d => d.traded)?.day ?? lastDay.day;
-    if (target != null && lastDay.total_pct >= target) { res.status = "passed"; res.statusDay = lastTraded; }
-    else if (lastDay.total_pct < 0) { res.status = "failed"; res.statusDay = lastTraded; }
+    const now = new Date(), wd = now.getUTCDay(), weekend = wd === 6 || wd === 0 || (wd === 5 && now.getUTCHours() >= 20);
+    const maxDD = Math.max(0, ...res.days.map(d => d.dd_pct));
+    const nearLimit = maxDD >= rules.max - 0.5 || (lastTradedRow?.day_loss_pct ?? 0) >= rules.daily - 0.5;
+    if (!weekend && target != null && lastDay.total_pct >= target) { res.status = "passed"; res.statusDay = lastTraded; }
+    else if (nearLimit && (!weekend || acc.status === "failed")) { res.status = "failed"; res.statusDay = lastTraded; }
   }
+  // Ручная отметка админа: проп закрыл счёт по причине, которую по цифрам не увидеть
+  if (acc.manual_failed && res.status !== "failed") { res.status = "failed"; res.statusDay = acc.status === "failed" && acc.status_day ? acc.status_day : lastTraded; }
   await sb.from("ctrader_accounts").update({ status: res.status, status_day: res.statusDay }).eq("id", acc.id);
   return { res, today, wasStatus: acc.status };
 }

@@ -35,8 +35,17 @@ export default async function TraderCard({ params, searchParams }: { params: { i
             <button className="btn" type="submit">{b.acc.balance_locked ? "Сохранить" : "Подтвердить"}</button>
             {b.acc.balance_locked && <button className="btn ghost" type="submit" name="lock" value="0">Разрешить трейдеру менять</button>}
           </form>
+          <form action={adminAccountAction} style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", marginTop: 14, paddingTop: 14, borderTop: "1px solid var(--line)" }}>
+            <input type="hidden" name="id" value={b.acc.id} /><input type="hidden" name="user" value={params.id} />
+            {b.acc.manual_failed
+              ? <><span className="pill l-failed"><span className="dot" />Отмечен Failed вручную</span><button className="btn ghost" type="submit" name="act" value="unfail">Снять отметку</button></>
+              : <ConfirmButton name="act" value="fail" label="Отметить Failed" question="Проп закрыл этот счёт? Статус станет Failed." yes="Да, отметить" />}
+            <span className="fine">Для случаев, когда проп закрыл счёт по причине, которую не видно по цифрам. Отметку можно снять.</span>
+          </form>
           <p className="fine" style={{ marginTop: 10 }}>{b.acc.balance != null ? <>Текущий баланс в cTrader: <b className="mono" style={{ color: "var(--gold2)" }}>{usd(b.acc.balance)}</b> · </> : null}Сверьте с Account Size в кабинете FundedHive. После подтверждения трейдер не может изменить этап и баланс.</p>
         </section>)}
+      {searchParams.e === "migrate" && <div className="w l-red notice">Сначала выполните в Supabase SQL из файла supabase/migrations/011_manual_failed.sql.</div>}
+      {["fail", "unfail"].includes(searchParams.ok || "") && <div className="w l-green notice">{searchParams.ok === "fail" ? "Счёт отмечен как Failed." : "Ручная отметка Failed снята."}</div>}
       {["remove", "reject"].includes(searchParams.ok || "") && <div className="w l-green notice">{searchParams.ok === "remove" ? "Счёт удалён вместе с историей." : "Запрос на удаление отклонён."}</div>}
       {b.accounts.some(a => !a.removed) && (
         <section className="panel">
