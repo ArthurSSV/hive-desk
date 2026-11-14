@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import TradeChart, { type Bars } from "./TradeChart";
 import { barsInWindow } from "@/lib/equity";
+import { dayKey } from "@/lib/engine";
 
 const TFS = ["M1", "M5", "M15", "H1"];
 
@@ -12,9 +13,12 @@ const dtIn = (tz: string) => (iso: string) => new Date(iso).toLocaleString("ru-R
 const px = (v: number | null) => (v == null ? "—" : Number(v).toLocaleString("en-US", { maximumFractionDigits: 5 }));
 
 /** История сделок: одна строка на закрытую позицию (или её часть). */
-export default function DealsHistory({ deals, login, initial, accountId, tz }: { deals: D[]; login: number; initial: number; accountId: number; tz: string }) {
+export default function DealsHistory({ deals, login, initial, accountId, tz, dayTz = "UTC" }: { deals: D[]; login: number; initial: number; accountId: number; tz: string; dayTz?: string }) {
   const dt = dtIn(tz);
   const [page, setPage] = useState(0), [q, setQ] = useState("");
+  // Фильтр по торговому дню: приходит из календаря «Прибыль по дням»
+  const [day, setDay] = useState<string | null>(null);
+  useEffect(() => { const on = (e: Event) => { setDay((e as CustomEvent).detail || null); setPage(0); setHover(null); }; addEventListener("cab:day", on); return () => removeEventListener("cab:day", on); }, []);
   const [hover, setHover] = useState<{ key: number; pos: number; top: number; left: number; pinned: boolean; tf: string } | null>(null);
   // Ключ кэша: позиция и таймфрейм ("" — сохранённые при синхронизации свечи)
   const [cache, setCache] = useState<Record<string, Bars | "loading" | "none" | { err: string }>>({});
@@ -45,8 +49,10 @@ export default function DealsHistory({ deals, login, initial, accountId, tz }: {
       const o = d.position_id != null ? opens.get(d.position_id) : undefined;
       const side = o?.side || (d.side === "buy" ? "sell" : "buy"); // закрывающая сделка идёт в обратную сторону
       return { d, o, side, pct: initial ? (Number(d.net_profit) / initial) * 100 : 0 };
-    }).filter(r => !q || String(r.d.position_id).includes(q) || String(r.d.deal_id).includes(q) || (r.d.symbol || "").toLowerCase().includes(q.toLowerCase()));
-  }, [deals, initial, q]);
+    }).filter(r => !day || dayKey(new Date(r.d.exec_ts), dayTz) === day)
+      .filter(r => !q || String(r.d.position_id).includes(q) || String(r.d.deal_id).includes(q) || (r.d.symbol || "").toLowerCase().includes(q.toLowerCase()));
+  }, [deals, initial, q, day, dayTz]);
+  const daySum = day ? rows.reduce((a, r) => a + Number(r.d.net_profit), 0) : 0;
   // Позиция, закрытая частями: метка каждой части по порядку закрытия (TP1, TP2…; убыточная часть — SL) и итог по позиции
   const parts = useMemo(() => {
     const by = new Map<number, D[]>();
@@ -71,6 +77,9 @@ export default function DealsHistory({ deals, login, initial, accountId, tz }: {
     <section className="panel">
       <div className="ph"><h2>История сделок</h2>
         <div className="tools"><input id="dq" type="search" placeholder="Позиция, сделка или символ" value={q} onChange={e => { setQ(e.target.value); setPage(0); }} aria-label="Поиск сделки" /></div></div>
+      {day && (
+        <div className="dayfilter">Сделки за <b className="mono">{day.slice(8)}.{day.slice(5, 7)}</b> · {rows.length} сд. · итог дня <b className={`mono ${daySum >= 0 ? "pos" : "neg"}`}>{daySum < 0 ? "-" : "+"}${Math.abs(daySum).toFixed(2)}</b>
+          <button type="button" className="linkbtn" onClick={() => { setDay(null); setPage(0); }}>Показать все</button></div>)}
       <div className="tablewrap"><table>
         <thead><tr><th>Счёт</th><th>Позиция</th><th>Открыта</th><th>Символ</th><th>Сторона</th><th className="n">Лот</th><th className="n">Цена входа</th><th className="n">Цена выхода</th><th>Закрыта</th><th className="n">Прибыль</th><th className="n">Прибыль %</th></tr></thead>
         <tbody className="blocks">{view.map(({ d, o, side, pct }, i) => (
@@ -90,7 +99,7 @@ export default function DealsHistory({ deals, login, initial, accountId, tz }: {
             <td className={`n ${Number(d.net_profit) > 0 ? "pos" : Number(d.net_profit) < 0 ? "neg" : ""}`}>{Number(d.net_profit) < 0 ? "-" : ""}${Math.abs(Number(d.net_profit)).toFixed(2)}</td>
             <td className={`n ${pct > 0 ? "pos" : pct < 0 ? "neg" : ""}`}>{pct.toFixed(2)}%</td>
           </tr>))}
-          {!view.length && <tr><td colSpan={11} className="fine">Закрытых сделок пока нет.</td></tr>}
+          {!view.length && <tr><td colSpan={11} className="fine">{day ? "В этот день сделок нет." : "Закрытых сделок пока нет."}</td></tr>}
         </tbody></table></div>
       {hover && (() => {
         const row = rows.find(x => x.d.deal_id === hover.key); if (!row) return null;

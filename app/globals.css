@@ -283,3 +283,64 @@ tbody.blocks tr.hl>td:nth-child(2){background:linear-gradient(90deg,rgba(232,181
 .legs>div.cur{background:rgba(232,181,74,.10);color:var(--fg);border-radius:4px}
 .legs>div>span:nth-child(3),.legs>div>span:nth-child(4),.legs>div>span:nth-child(5){text-align:right}
 .legs b{font-weight:800;color:var(--fg)}
+
+/* ---------- Кабинет: вкладки, календарь, аналитика, последние сделки ---------- */
+.okdot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--green);margin-left:8px;vertical-align:1px}
+.ctabs{display:flex;gap:4px;border-bottom:1px solid var(--line2);overflow-x:auto;scrollbar-width:none;margin-top:-4px;scroll-margin-top:70px}
+.ctabs::-webkit-scrollbar{display:none}
+.ctabs button{all:unset;cursor:pointer;padding:10px 16px;font-weight:800;font-size:14px;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-1px;white-space:nowrap;display:flex;align-items:center;gap:7px}
+.ctabs button:hover{color:var(--fg)}
+.ctabs button[aria-selected="true"]{color:var(--gold);border-bottom-color:var(--gold)}
+.ctabs button:focus-visible{outline:2px solid var(--gold);outline-offset:-2px;border-radius:6px}
+.ctabs .cnt{font:700 11px var(--f-mono);color:var(--muted);background:var(--surface2);border:1px solid var(--line);border-radius:10px;padding:0 6px}
+.ctabs .need{width:7px;height:7px;border-radius:50%;background:var(--amber)}
+.cpanel{display:grid;gap:20px;min-width:0} .cpanel[hidden]{display:none}
+.jgrid{grid-template-columns:minmax(0,1fr) minmax(0,1fr)} @media (max-width:960px){.jgrid{grid-template-columns:1fr}}
+.row-cur{display:grid;grid-template-columns:minmax(0,3fr) minmax(0,2fr);gap:20px;align-items:start}
+@media (max-width:1080px){.row-cur{grid-template-columns:1fr}}
+.linkbtn{all:unset;cursor:pointer;color:var(--gold);font-weight:700;font-size:13px;text-decoration:underline;text-underline-offset:3px}
+.linkbtn:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+.dayfilter{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:8px 12px;border-radius:9px;border:1px solid var(--gold-dim);background:linear-gradient(90deg,rgba(232,181,74,.14),transparent 80%);margin-bottom:12px;font-size:13px}
+/* календарь */
+.cal-top{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+.cal-nav{display:flex;align-items:center;gap:6px}
+.cal-nav b{min-width:120px;text-align:center;font-size:15px}
+.cal-nav button{all:unset;cursor:pointer;width:28px;height:28px;display:grid;place-items:center;border-radius:6px;border:1px solid var(--line2);color:var(--muted);font-weight:800}
+.cal-nav button:hover{color:var(--gold);border-color:var(--gold-dim)} .cal-nav button:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+.cal-sum{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px}
+.cal-sum>div{background:var(--surface2);border:1px solid var(--line);border-radius:9px;padding:8px 10px;min-width:0}
+.cal-sum .k{font-size:11px;color:var(--muted)} .cal-sum .v{font-family:var(--f-mono);font-weight:700;font-size:14px;margin-top:1px;white-space:nowrap}
+@media (max-width:420px){.cal-sum{grid-template-columns:repeat(2,1fr)}}
+.cal{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px}
+.cal .wd{font-size:10.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);text-align:center;padding:2px 0 4px}
+.cal .c{min-height:54px;border-radius:7px;background:var(--surface2);border:1px solid var(--line);padding:4px 5px;display:flex;flex-direction:column;justify-content:space-between;align-items:flex-start;min-width:0;font:inherit;color:inherit;text-align:left;margin:0}
+.cal .c .n{font:600 11px var(--f-mono);color:var(--muted)}
+.cal .c .p{font:700 11.5px var(--f-mono);white-space:nowrap}
+.cal .c .t{font:500 10px var(--f-mono);color:var(--muted)}
+.cal .c.out{opacity:.38}
+.cal .c.win{background:var(--green-bg);border-color:rgba(47,208,122,.35)} .cal .c.win .p{color:var(--green)}
+.cal .c.loss{background:var(--red-bg);border-color:rgba(240,86,90,.35)} .cal .c.loss .p{color:var(--red)}
+.cal .c.today{outline:2px solid var(--gold);outline-offset:-1px}
+.cal .c.wk{background:transparent;border-style:dashed}
+.cal .c.has{cursor:pointer} .cal .c.has:hover{outline:2px solid var(--gold-dim);outline-offset:-1px} .cal .c.has:focus-visible{outline:2px solid var(--gold);outline-offset:1px}
+@media (max-width:520px){.cal{gap:3px}.cal .c{padding:3px 2px;min-height:50px}.cal .c .p{font-size:9.5px;letter-spacing:-.04em}.cal .c .t{font-size:9px}.cal .c .n{font-size:10px}}
+/* аналитика */
+.an{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+@media (max-width:1180px){.an{grid-template-columns:repeat(2,minmax(0,1fr))}} @media (max-width:620px){.an{grid-template-columns:1fr}}
+.an>div{background:var(--surface2);border:1px solid var(--line);border-radius:10px;padding:14px;min-width:0}
+.an h3{margin:0 0 10px;font-size:14px;font-weight:800}
+.an .r{margin-bottom:9px} .an .r:last-child{margin-bottom:0}
+.an .r .l{display:flex;justify-content:space-between;gap:8px;font-size:12.5px;align-items:baseline}
+.an .r .l b{font-weight:700} .an .r .l span{color:var(--muted);font-size:11.5px} .an .r .l em{font:700 12px var(--f-mono);font-style:normal;white-space:nowrap}
+.an .r .b{height:5px;border-radius:3px;background:var(--line);margin-top:5px;overflow:hidden} .an .r .b i{display:block;height:100%;border-radius:3px}
+.an-note{display:flex;gap:8px 18px;flex-wrap:wrap;font-size:13px;color:var(--muted);margin-bottom:14px}
+.an-note b{color:var(--fg)}
+/* последние сделки */
+.last{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 28px}
+@media (max-width:860px){.last{grid-template-columns:1fr}}
+.last>div{display:grid;grid-template-columns:auto 1fr auto;gap:2px 10px;align-items:center;padding:10px 0;border-bottom:1px solid var(--line)}
+.last .s{grid-row:span 2} .last b{font-weight:800} .last .lot{color:var(--muted);font-size:12.5px}
+.last .m{font:500 11.5px var(--f-mono);color:var(--muted);grid-column:2}
+.last .p{font:700 13.5px var(--f-mono);text-align:right;grid-column:3;grid-row:1} .last .pp{font:500 11px var(--f-mono);text-align:right;grid-column:3;grid-row:2}
+:root[data-theme="light"] .cal .c.win{border-color:rgba(18,130,74,.35)} :root[data-theme="light"] .cal .c.loss{border-color:rgba(201,48,47,.35)}
+:root[data-theme="light"] .dayfilter{background:linear-gradient(90deg,rgba(232,181,74,.30),transparent 80%)}
