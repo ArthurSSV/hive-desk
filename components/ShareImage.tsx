@@ -8,6 +8,7 @@ export type CardData = {
   heroLabel?: string;              // «ИТОГ ГРУППЫ» / «ИТОГ КОМАНДЫ»
   date: string;                    // «06.11.2026» / «02.11–08.11.2026»
   heroPct: number; heroUsd: number; capital: number;
+  heroNote?: string;               // строка под капиталом: «с начала челленджа −1.37% · −$20,030»
   curve: { day: string; v: number }[];
   tiles: { k: string; v: string; f: string; tone?: "pos" | "neg" | "" ; parts?: { t: string; tone: "pos" | "neg" | "" }[] }[];
   zones: { green: number; work: number; yellow: number; red: number };
@@ -63,6 +64,7 @@ export async function drawCard(d: CardData): Promise<HTMLCanvasElement> {
   const hw = txt(ctx, sg(d.heroPct), 76, 360, `700 ${fs}px ${MONO}`, heroCol, "left", -3);
   txt(ctx, usd(d.heroUsd), 76 + hw + 24, 358, `700 44px ${MONO}`, C.fg);
   txt(ctx, `от капитала ${usd(d.capital, false)}`, 76 + hw + 24, 398, `600 20px ${SANS}`, C.muted);
+  if (d.heroNote) { let ns = 20; ctx.font = `600 ${ns}px ${SANS}`; while (ctx.measureText(d.heroNote).width > 1000 - (76 + hw + 24) && ns > 13) { ns--; ctx.font = `600 ${ns}px ${SANS}`; } txt(ctx, d.heroNote, 76 + hw + 24, 428, `600 ${ns}px ${SANS}`, C.soft); }
 
   // кривая группы
   const cx0 = 90, cx1 = 990, cy0 = 452, cy1 = 642, pts = d.curve;

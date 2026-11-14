@@ -59,17 +59,27 @@ export default async function Summary({ searchParams }: { searchParams: { day?: 
     `Требуют внимания: ${attention.length ? attention.map(t => `${t.name} (${LEVEL_LABEL[t.zone]})`).join(", ") : "нет"}`,
   ].filter(Boolean).join("\n");
 
+  // Кривая на картинке: для недели, месяца и своего периода — результат внутри периода, от нуля в его начале
+  const periodCurve = (() => {
+    if (P === "all" || day) return S.chart.map(d => ({ day: fmtD(d.day), v: d.cumPct }));
+    const i = S.chart.findIndex(d => d.day >= S.start), inside = S.chart.filter(d => d.day >= S.start && d.day <= S.end);
+    if (i < 0 || inside.length < 1) return S.chart.map(d => ({ day: fmtD(d.day), v: d.cumPct }));
+    const prev = i > 0 ? S.chart[i - 1] : null, base = prev?.cumPct ?? 0;
+    return [{ day: "старт", v: 0 }, ...inside.map(d => ({ day: fmtD(d.day), v: d.cumPct - base }))];
+  })();
   const card: CardData = {
     file: `matryoshka-svodka-${isAll ? "" : S.scope.key + "-"}${P}-${S.key}`,
     caption: (isAll ? "" : S.scope.short + " · ") + (day ? (isAll ? "Сводка группы" : "сводка") : P === "all" ? "за всё время" : P === "week" ? "за неделю" : P === "range" ? "за период" : "за месяц"),
-    heroLabel: isAll ? "Итог группы" : S.scope.key.startsWith("team-") ? "Итог команды" : "Итог выборки",
+    // Крупно — результат выбранного периода; итог с начала челленджа — строкой ниже
+    heroLabel: P === "all" ? (isAll ? "Итог группы" : S.scope.key.startsWith("team-") ? "Итог команды" : "Итог выборки") : day ? "Итог дня" : P === "week" ? "Итог недели" : P === "month" ? "Итог месяца" : "Итог периода",
     date: day ? `${fmtD(S.end)}.${year}` : P === "month" ? S.label.short : `${fmtD(S.start)}–${fmtD(S.end)}.${year}`,
-    heroPct: sum.cumPct, heroUsd: sum.cum, capital: S.capital,
-    curve: S.chart.map(d => ({ day: fmtD(d.day), v: d.cumPct })),
+    heroPct: P === "all" ? sum.cumPct : sum.pct, heroUsd: P === "all" ? sum.cum : sum.pnl, capital: S.capital,
+    heroNote: P === "all" ? undefined : `с начала челленджа ${sg(sum.cumPct)}% · ${money(sum.cum, true)}`,
+    curve: periodCurve,
     tiles: [
       P === "all"
         ? { k: "Торговых дней", v: String(sum.tradingDays), f: `сделок ${sum.trades}` }
-        : { k: day ? "За день" : P === "week" ? "За неделю" : P === "range" ? "За период" : "За месяц", v: money(sum.pnl, true), f: `${sg(sum.pct)}% к капиталу`, tone: sum.pnl > 0 ? "pos" : sum.pnl < 0 ? "neg" : "" },
+        : { k: "С начала", v: money(sum.cum, true), f: `${sg(sum.cumPct)}% к капиталу`, tone: sum.cum > 0 ? "pos" : sum.cum < 0 ? "neg" : "" },
       { k: "Плюс / минус", v: "", f: `без сделок ${sum.flat}`, parts: [{ t: String(sum.plus), tone: "pos" }, { t: " / ", tone: "" }, { t: String(sum.minus), tone: "neg" }] },
       P === "all" ? { k: "Капитал", v: money(S.capital), f: `баланс ${money(S.balance)}` } : { k: "Сделок", v: String(sum.trades), f: day ? "за день" : `${sum.tradingDays} торг. дн.` },
       { k: "Счетов", v: String(S.count), f: `Фаза 1 · ${S.phases.p1}` },
