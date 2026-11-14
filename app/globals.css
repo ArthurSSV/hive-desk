@@ -344,3 +344,11 @@ tbody.blocks tr.hl>td:nth-child(2){background:linear-gradient(90deg,rgba(232,181
 .last .p{font:700 13.5px var(--f-mono);text-align:right;grid-column:3;grid-row:1} .last .pp{font:500 11px var(--f-mono);text-align:right;grid-column:3;grid-row:2}
 :root[data-theme="light"] .cal .c.win{border-color:rgba(18,130,74,.35)} :root[data-theme="light"] .cal .c.loss{border-color:rgba(201,48,47,.35)}
 :root[data-theme="light"] .dayfilter{background:linear-gradient(90deg,rgba(232,181,74,.30),transparent 80%)}
+
+/* аналитика: серии, стоп и RR */
+.an3{grid-template-columns:repeat(3,minmax(0,1fr))} @media (max-width:980px){.an3{grid-template-columns:1fr}}
+.streaks{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px} @media (max-width:760px){.streaks{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.streaks>div{background:var(--surface2);border:1px solid var(--line);border-radius:10px;padding:10px 12px;min-width:0}
+.streaks .k{font-size:11.5px;color:var(--muted)} .streaks .v{font:700 18px var(--f-mono);margin-top:2px} .streaks .s{font-size:11.5px;color:var(--muted);margin-top:2px}
+.beads{display:flex;flex-wrap:wrap;gap:4px} .beads i{width:14px;height:14px;border-radius:4px;display:block}
+.beads i.w{background:var(--green)} .beads i.l{background:var(--red)}

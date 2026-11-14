@@ -43,12 +43,14 @@ export async function traderBundle(sb: SupabaseClient, userId: string) {
   const [{ data: days }, { data: deals }] = acc
     ? await Promise.all([
         sb.from("daily_stats").select("*").eq("account_id", acc.id).order("day"),
-        sb.from("deals").select("deal_id,position_id,symbol,side,lots,price,entry_price,exec_ts,is_close,net_profit").eq("account_id", acc.id).order("exec_ts", { ascending: false }).limit(1000),
+        sb.from("deals").select("deal_id,position_id,symbol,side,lots,volume,price,entry_price,conv,exec_ts,is_close,net_profit").eq("account_id", acc.id).order("exec_ts", { ascending: false }).limit(1000),
       ])
     : [{ data: [] as any[] }, { data: [] as any[] }];
+  // Стопы и тейки позиций (миграция 012); если таблицы нет — аналитика «Стоп и RR» просто не показывается
+  const { data: meta } = acc ? await sb.from("position_meta").select("position_id,sl,tp,close_reason").eq("account_id", acc.id) : { data: [] as any[] };
   const jmap = new Map((journal || []).map((j: any) => [j.day, j]));
   const merged = (days || []).map((d: any) => ({ ...d, level: zoneOf(d.total_pct, acc!.phase, rules), traded: d.trades > 0 || Number(d.pnl) !== 0, mood: jmap.get(d.day)?.mood ?? null }));
-  return { profile, accounts: (accounts || []) as Account[], acc, days: merged, deals: (deals || []) as any[], journal: journal || [], chain: chain || [], rules, m: summarize(merged, rules.profitDayPct, { today: dayKey(new Date(), rules.tz), initial: Number(acc?.balance || acc?.initial_balance || 0) }) };
+  return { profile, accounts: (accounts || []) as Account[], acc, days: merged, deals: (deals || []) as any[], meta: (meta || []) as any[], journal: journal || [], chain: chain || [], rules, m: summarize(merged, rules.profitDayPct, { today: dayKey(new Date(), rules.tz), initial: Number(acc?.balance || acc?.initial_balance || 0) }) };
 }
 
 export async function groupBundle(sb: SupabaseClient) {

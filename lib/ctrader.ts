@@ -13,6 +13,8 @@ export const PT = {
   DEAL_LIST_REQ: 2133, DEAL_LIST_RES: 2134,
   OA_ERROR: 2142,
   ACCOUNTS_BY_TOKEN_REQ: 2149, ACCOUNTS_BY_TOKEN_RES: 2150,
+  RECONCILE_REQ: 2124, RECONCILE_RES: 2125,
+  ORDER_LIST_REQ: 2175, ORDER_LIST_RES: 2176,
 } as const;
 
 const AUTH_URL = process.env.CTRADER_AUTH_URL || "https://connect.spotware.com/apps/auth";
@@ -137,6 +139,21 @@ export class CTraderConnection {
       out.push(...(r.deal || []));
     }
     return out;
+  }
+
+  /** История ордеров (там есть стоп, тейк и признак закрывающего ордера); окнами по неделе, как сделки. */
+  async orders(ctid: number, fromMs: number, toMs: number): Promise<any[]> {
+    const WEEK = 7 * 24 * 3600 * 1000, out: any[] = [];
+    for (let a = fromMs; a < toMs; a += WEEK) {
+      const r = await this.limited(() => this.request(PT.ORDER_LIST_REQ, { ctidTraderAccountId: ctid, fromTimestamp: a, toTimestamp: Math.min(a + WEEK, toMs) }, PT.ORDER_LIST_RES));
+      out.push(...(r.order || []));
+    }
+    return out;
+  }
+  /** Открытые сейчас позиции с текущими стопом и тейком. */
+  async openPositions(ctid: number): Promise<any[]> {
+    const r = await this.request(PT.RECONCILE_REQ, { ctidTraderAccountId: ctid }, PT.RECONCILE_RES);
+    return r.position || [];
   }
 
   /** Исторические запросы cTrader ограничены ~5 в секунду: держим паузу и повторяем при лимите. */

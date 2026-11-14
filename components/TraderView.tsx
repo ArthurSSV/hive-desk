@@ -155,7 +155,7 @@ export default function TraderView({ b, mode, journalDay, journalSaved, journalE
       <CabinetTabs initial={journalDay || journalSaved || journalError ? "journal" : "dashboard"} force={!!(journalDay || journalSaved || journalError)} tabs={[
         { id: "dashboard", label: "Дашборд", node: dashboard },
         { id: "deals", label: "Сделки", count: closedCount, node: <DealsHistory deals={b.deals} login={acc.trader_login || acc.ctid_trader_account_id} initial={init} accountId={acc.id} tz={vtz} dayTz={R.tz} /> },
-        { id: "analytics", label: "Аналитика", node: <Analytics deals={b.deals as any} initial={init} tz={vtz} /> },
+        { id: "analytics", label: "Аналитика", node: <Analytics deals={b.deals as any} initial={init} tz={vtz} meta={(b as any).meta} /> },
         { id: "journal", label: "Дневник", dot: needJournal, dotTitle: "Сегодня ещё не заполнен", node: journalTab },
       ]} />
     </>

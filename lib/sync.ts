@@ -82,6 +82,8 @@ async function pullDeals(sb: SupabaseClient, acc: Account) {
       if (error) throw error;
     }
     await pullBars(sb, c, acc);
+    // Стопы и тейки — для аналитики «Стоп и RR». Любая ошибка здесь не должна ломать синхронизацию.
+    try { await pullMeta(sb, c, acc, from); } catch (e: any) { console.warn(`position_meta ${acc.id}: ${e?.message || e}`); }
     // Если начальный баланс не задан — восстанавливаем его по текущему балансу и сумме всех сделок
     let initial = acc.initial_balance;
     if (initial == null) {
@@ -97,6 +99,44 @@ async function pullDeals(sb: SupabaseClient, acc: Account) {
     if (e1) await sb.from("ctrader_accounts").update(upd).eq("id", acc.id);
     return { initial };
   } finally { c.close(); }
+}
+
+const isBuy = (s: any) => s === 1 || s === "BUY";
+const typeOf = (t: any) => (typeof t === "string" ? t : ({ 1: "MARKET", 2: "LIMIT", 3: "STOP", 4: "STOP_LOSS_TAKE_PROFIT", 5: "MARKET_RANGE", 6: "STOP_LIMIT" } as Record<number, string>)[t] || "");
+
+/** Стоп, тейк и причина закрытия позиций: из истории ордеров и из открытых позиций. */
+async function pullMeta(sb: SupabaseClient, c: CTraderConnection, acc: Account, fromMs: number) {
+  const { data: have, error } = await sb.from("position_meta").select("position_id,sl,tp,sl_source,close_reason").eq("account_id", acc.id);
+  if (error) return; // миграция 012 ещё не выполнена
+  const { count } = await sb.from("deals").select("deal_id", { count: "exact", head: true }).eq("account_id", acc.id);
+  // Первый раз забираем всю историю счёта, дальше — только свежие ордера
+  const since = (have || []).length || !count ? fromMs : Date.now() - HISTORY_DAYS * 86400_000;
+  const meta = new Map<number, any>((have || []).map(h => [Number(h.position_id), { ...h }]));
+  const touch = new Set<number>();
+  const get = (id: number) => { if (!meta.has(id)) meta.set(id, { position_id: id, sl: null, tp: null, sl_source: null, close_reason: null }); touch.add(id); return meta.get(id); };
+  const rel = (o: any, v: any, sign: number) => { const p = Number(o.executionPrice); return v != null && p ? p + (sign * Number(v)) / 100000 : null; };
+
+  for (const o of await c.orders(acc.ctid_trader_account_id, since, Date.now())) {
+    const pid = o.positionId != null ? Number(o.positionId) : null; if (pid == null) continue;
+    const m = get(pid), buy = isBuy(o.tradeData?.tradeSide), status = String(o.orderStatus ?? "");
+    if (o.closingOrder) {
+      if (!/FILLED|^2$/.test(status) && status !== "") continue;
+      m.close_reason = o.isStopOut ? "stopout" : typeOf(o.orderType) === "STOP_LOSS_TAKE_PROFIT" ? "sltp" : m.close_reason === "sltp" ? "sltp" : "manual";
+    } else if (m.sl_source !== "order") {
+      // Стоп у рыночного ордера задаётся относительно цены исполнения (в 1/100000 цены)
+      const sl = o.stopLoss != null ? Number(o.stopLoss) : rel(o, o.relativeStopLoss, buy ? -1 : 1);
+      const tp = o.takeProfit != null ? Number(o.takeProfit) : rel(o, o.relativeTakeProfit, buy ? 1 : -1);
+      if (sl != null || tp != null) { m.sl = sl ?? m.sl; m.tp = tp ?? m.tp; m.sl_source = "order"; }
+    }
+  }
+  // Стоп, поставленный уже после входа, видно только у открытой позиции — запоминаем первый увиденный
+  for (const p of await c.openPositions(acc.ctid_trader_account_id)) {
+    const pid = Number(p.positionId), m = get(pid);
+    if (m.sl == null && p.stopLoss != null) { m.sl = Number(p.stopLoss); m.sl_source = m.sl_source || "open"; }
+    if (m.tp == null && p.takeProfit != null) m.tp = Number(p.takeProfit);
+  }
+  const rows = [...touch].map(id => ({ ...meta.get(id), account_id: acc.id, user_id: acc.user_id, updated_at: new Date().toISOString() }));
+  for (let i = 0; i < rows.length; i += 500) await sb.from("position_meta").upsert(rows.slice(i, i + 500), { onConflict: "account_id,position_id" });
 }
 
 const DEAL_COLS = "position_id,symbol_id,symbol,side,volume,exec_ts,is_close,price,entry_price,conv,net_profit,lots";
