@@ -20,7 +20,7 @@ const money = (v: number, signed = false) => (signed ? (v > 0 ? "+" : v < 0 ? "�
 const TABS: [Period, string][] = [["day", "День"], ["week", "Неделя"], ["month", "Месяц"], ["all", "Всё время"]];
 const FOR: Record<Period, string> = { day: "за день", week: "за неделю", month: "за месяц", all: "за всё время", range: "за период" };
 
-export default async function Summary({ searchParams }: { searchParams: { day?: string; period?: string; scope?: string; u?: string | string[]; from?: string; to?: string } }) {
+export default async function Summary({ searchParams }: { searchParams: { day?: string; period?: string; scope?: string; u?: string | string[]; from?: string; to?: string; hist?: string } }) {
   const { sb } = await requireAdmin();
   const u = searchParams.u == null ? [] : Array.isArray(searchParams.u) ? searchParams.u : [searchParams.u];
   const S = await summaryBundle(sb, { day: searchParams.day, period: searchParams.period, scope: searchParams.scope, pick: u, from: searchParams.from, to: searchParams.to });
@@ -104,6 +104,20 @@ export default async function Summary({ searchParams }: { searchParams: { day?: 
     zones: { green: S.zones.green, work: S.zones.work, yellow: S.zones.yellow, red: S.zones.red }, best: best ? `${best.name} ${sg(best.pnlPct!)}%` : null,
   } : null;
   const noDays = (S as any).noDays === true;
+  // График: для недели, месяца и своего периода — только выбранный период, от нуля в его начале; «с начала» — по кнопке
+  const canTrim = P === "week" || P === "month" || P === "range", hist = !canTrim || searchParams.hist === "1";
+  const chartRows = (() => {
+    if (hist) return S.chart;
+    const i = S.chart.findIndex(d => d.day >= S.start), base = i > 0 ? S.chart[i - 1].cumPct : 0;
+    const inside = S.chart.filter(d => d.day >= S.start && d.day <= S.end).map(d => ({ ...d, cumPct: d.cumPct - base }));
+    return inside.length ? inside : S.chart;
+  })();
+  const histHref = (() => {
+    const q = new URLSearchParams();
+    for (const [k, v] of Object.entries(searchParams)) if (k !== "hist" && v != null) (Array.isArray(v) ? v : [v]).forEach(x => q.append(k, x));
+    if (!hist) q.set("hist", "1");
+    return `/admin/summary?${q.toString()}`;
+  })();
   const OV = (<>
       {noDays ? <section className="panel"><p className="fine" style={{ margin: 0 }}>В периоде {fmtD(S.start)}–{fmtD(S.end)} нет торговых дней. Выберите другие даты.</p></section> : <>
       <section className="strip" aria-label="Итоги">
@@ -142,8 +156,12 @@ export default async function Summary({ searchParams }: { searchParams: { day?: 
         </section>)}
 
       <section className="panel">
-        <div className="ph"><h2>Как мы двигаемся вместе</h2><span className="fine">линия — накопленный результат, % от общего капитала · столбцы — итог дня, ${P !== "all" ? " · выбранный период подсвечен" : ""}</span></div>
-        <GroupChart rows={S.chart} from={P === "all" ? null : S.start} to={P === "all" ? null : S.end} />
+        <div className="ph"><h2>Как мы двигаемся вместе</h2>
+          <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+            <span className="fine">{hist ? `линия — накопленный результат с начала, % от общего капитала · столбцы — итог дня, $${P !== "all" ? " · выбранный период подсвечен" : ""}` : `линия — результат ${FOR[P]} с нуля, % от общего капитала · столбцы — итог дня, $`}</span>
+            {canTrim && <Link className="linkbtn noprint" href={histHref} scroll={false}>{hist ? "Только период" : "Показать с начала"}</Link>}
+          </div></div>
+        <GroupChart rows={chartRows} from={!hist || P === "all" ? null : S.start} to={!hist || P === "all" ? null : S.end} />
       </section>
 
       <div className="grid2">
