@@ -7,7 +7,8 @@ export const dynamic = "force-dynamic";
 
 export default async function Connect({ searchParams }: { searchParams: { error?: string; ok?: string } }) {
   const { sb, profile } = await requireUser();
-  const { data: accounts } = await sb.from("ctrader_accounts").select("*").eq("user_id", profile.id).eq("removed", false).order("created_at");
+  const { data: all } = await sb.from("ctrader_accounts").select("*").eq("user_id", profile.id).eq("removed", false).order("created_at");
+  const accounts = (all || []).filter((a: any) => !a.archived); // счета в архиве трейдер не включает
   return (
     <div className="auth" style={{ maxWidth: 640 }}>
       <div><h1>Подключение счёта</h1><p className="sub">Доступ только на чтение: мы видим баланс и сделки, но не можем торговать.</p></div>

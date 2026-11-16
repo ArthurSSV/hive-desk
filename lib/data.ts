@@ -23,7 +23,7 @@ export async function fetchAll<T = any>(build: () => any, page = 1000): Promise<
 
 /** Текущий счёт трейдера: активный незавершённый, иначе последний подключённый. */
 export function currentAccount(accs: Account[]): Account | null {
-  const act = accs.filter(a => a.active && !(a as any).removed);
+  const act = accs.filter(a => a.active && !(a as any).removed && !(a as any).archived);
   return act.find(a => a.status === "active") || act.sort((a, b) => b.created_at.localeCompare(a.created_at))[0] || null;
 }
 
@@ -32,7 +32,10 @@ export async function rulesOf(sb: SupabaseClient) {
   return normalizeRules(data?.rules);
 }
 
-export async function traderBundle(sb: SupabaseClient, userId: string) {
+export const isArchived = (a: Account) => !!(a as any).archived && !(a as any).removed;
+
+/** Для админа: если активного счёта нет, показываем последний из архива. */
+export async function traderBundle(sb: SupabaseClient, userId: string, opts: { archive?: boolean } = {}) {
   const [{ data: profile }, { data: accounts }, { data: journal }, { data: chain }, rules] = await Promise.all([
     sb.from("profiles").select("*").eq("id", userId).single(),
     sb.from("ctrader_accounts").select("*").eq("user_id", userId).order("created_at"),
@@ -40,7 +43,7 @@ export async function traderBundle(sb: SupabaseClient, userId: string) {
     sb.from("chain_events").select("*").eq("user_id", userId).order("ts", { ascending: false }),
     rulesOf(sb),
   ]);
-  const acc = currentAccount((accounts || []) as Account[]);
+  const acc = currentAccount((accounts || []) as Account[]) || (opts.archive ? ((accounts || []) as Account[]).filter(isArchived).pop() || null : null);
   const [{ data: days }, { data: deals }] = acc
     ? await Promise.all([
         sb.from("daily_stats").select("*").eq("account_id", acc.id).order("day"),
@@ -73,7 +76,13 @@ export async function groupBundle(sb: SupabaseClient) {
   const daysByAcc = new Map<number, any[]>();
   for (const d of days || []) { const r = { ...d, level: zoneOf(d.total_pct, phaseOf.get(d.account_id) ?? 1, rules), traded: d.trades > 0 || Number(d.pnl) !== 0, mood: moods.get(d.user_id + d.day) ?? null }; if (!daysByAcc.has(d.account_id)) daysByAcc.set(d.account_id, []); daysByAcc.get(d.account_id)!.push(r); }
   const todayIso = new Date().toISOString().slice(0, 10);
-  const traders = (profiles || []).map((p: any) => {
+  const archive: { p: any; accs: Account[] }[] = [];
+  const traders = (profiles || []).filter((p: any) => {
+    const accs = accByUser.get(p.id) || [];
+    // Только архивные счета — трейдер уходит из списка группы в строку «В архиве»
+    if (!currentAccount(accs) && accs.some(isArchived) && !accs.some(a => !isArchived(a) && !(a as any).removed)) { archive.push({ p, accs: accs.filter(isArchived) }); return false; }
+    return true;
+  }).map((p: any) => {
     const acc = currentAccount(accByUser.get(p.id) || []);
     const ds = acc ? daysByAcc.get(acc.id) || [] : [];
     const last = ds[ds.length - 1];
@@ -86,7 +95,7 @@ export async function groupBundle(sb: SupabaseClient) {
     if (!temp.has(d.day)) temp.set(d.day, { day: d.day, red: 0, yellow: 0, work: 0, green: 0 });
     const r = temp.get(d.day)! as any; if (d.level in r) r[d.level]++;
   }
-  return { traders, teams, temp: [...temp.values()].sort((a, b) => a.day.localeCompare(b.day)).slice(-22), rules };
+  return { traders, archive, teams, temp: [...temp.values()].sort((a, b) => a.day.localeCompare(b.day)).slice(-22), rules };
 }
 
 export type Period = "day" | "week" | "month" | "all" | "range";
@@ -120,16 +129,26 @@ export async function summaryBundle(sb: SupabaseClient, opts: { day?: string; pe
   const teams = (teamRows || []) as Team[];
   const byUser = new Map<string, Account[]>();
   for (const a of (accounts || []) as Account[]) { if (!byUser.has(a.user_id)) byUser.set(a.user_id, []); byUser.get(a.user_id)!.push(a); }
-  const everyone = (profiles || []).map((p: any) => ({ p, acc: currentAccount(byUser.get(p.id) || []) }));
+  // Участники: текущий счёт каждого трейдера плюс счета из архива — их история остаётся в прошлых днях
+  const everyone: { p: any; acc: Account | null }[] = (profiles || []).flatMap((p: any) => {
+    const accs = byUser.get(p.id) || [], cur = currentAccount(accs);
+    return [...(cur ? [{ p, acc: cur }] : []), ...accs.filter(a => isArchived(a) && a.id !== cur?.id).map(acc => ({ p: cur ? { ...p, name: `${p.name} (архив)` } : p, acc }))];
+  });
   const allMembers = everyone.filter(m => m.acc && m.acc.initial_balance) as Member[];
   const ids = allMembers.map(m => m.acc.id);
+  // Групповая статистика считается со старта челленджа группы; счёт и зоны — по всей фазе (total_pct в строке)
+  const gs = rules.groupStart && /^\d{4}-\d{2}-\d{2}$/.test(rules.groupStart) ? rules.groupStart : "0000-01-01";
   const rows = ids.length
-    ? await fetchAll<any>(() => sb.from("daily_stats").select("account_id,day,pnl,pnl_pct,total_pct,trades,breach").in("account_id", ids).order("day").order("account_id"))
+    ? await fetchAll<any>(() => sb.from("daily_stats").select("account_id,day,pnl,pnl_pct,total_pct,trades,breach").in("account_id", ids).gte("day", gs).order("day").order("account_id"))
     : [];
   const rowsByAcc = new Map<number, any[]>();
   for (const r of rows) { if (!rowsByAcc.has(r.account_id)) rowsByAcc.set(r.account_id, []); rowsByAcc.get(r.account_id)!.push(r); }
 
   // Кого показываем
+  // Архивный счёт участвует в периоде, только если он ещё жил в нём (есть строки не раньше начала периода)
+  const lastRow = new Map<number, string>();
+  for (const r of rows) lastRow.set(r.account_id, r.day);
+  const alive = (ms: Member[], start: string) => ms.filter(m => !isArchived(m.acc) || (lastRow.get(m.acc.id) ?? "") >= start);
   const scopeRaw = opts.scope || "all";
   const pick = new Set(opts.pick || []);
   const teamOf = (m: Member) => m.p.team_id as number | null;
@@ -147,7 +166,8 @@ export async function summaryBundle(sb: SupabaseClient, opts: { day?: string; pe
 
   // Календарь торговых дней — общий для всей группы, чтобы периоды совпадали при любом выборе
   const allDays = [...new Set(rows.map(r => r.day as string))].sort();
-  const base = { period, rules, teams, scope, picker: allMembers.map(m => ({ id: m.p.id as string, name: m.p.name as string, team: teamOf(m) })), pick: [...pick] };
+  const picker = [...new Map(allMembers.map(m => [m.p.id as string, { id: m.p.id as string, name: m.p.name as string, team: teamOf(m) }])).values()];
+  const base = { period, rules, teams, scope, picker, pick: [...pick], groupStart: gs === "0000-01-01" ? null : gs };
   if (!allDays.length) return { ...base, empty: true as const, count: members.length };
   const first = allDays[0], last = allDays[allDays.length - 1];
   // Свой период: торговые дни между «с» и «по» включительно
@@ -156,8 +176,8 @@ export async function summaryBundle(sb: SupabaseClient, opts: { day?: string; pe
     const inR = allDays.filter(d => d >= f && d <= t);
     if (!inR.length) return { ...base, empty: false as const, ...agg0(), noDays: true as const, key: `${f}_${t}`, start: f, end: t, label: periodLabel("range", period, f, t), anchor: t, prev: null, next: null, compare: [], first, last, from: f, to: t };
     const start = inR[0], end = inR[inR.length - 1];
-    const agg = (ms: Member[]) => aggregate(ms, rowsByAcc, rules, period, start, end);
-    return { ...base, empty: false as const, ...agg(members), accs: accsOf(members), allDays, key: `${f}_${t}`, start, end, label: periodLabel("range", period, f, t), anchor: end, prev: null, next: null, compare: compareOf(agg), first, last, from: f, to: t };
+    const agg = (ms: Member[]) => aggregate(alive(ms, start), rowsByAcc, rules, period, start, end);
+    return { ...base, empty: false as const, ...agg(members), accs: accsOf(alive(members, start)), allDays, key: `${f}_${t}`, start, end, label: periodLabel("range", period, f, t), anchor: end, prev: null, next: null, compare: compareOf(agg), first, last, from: f, to: t };
   }
   function accsOf(ms: Member[]) { return ms.map(m => ({ uid: m.p.id as string, name: m.p.name as string, acc: m.acc })); }
   function agg0() { return aggregate([], rowsByAcc, rules, period, first, first); }
@@ -170,7 +190,7 @@ export async function summaryBundle(sb: SupabaseClient, opts: { day?: string; pe
   const start = inKey[0], end = inKey[inKey.length - 1];
   const lastDayOf = (k: string) => allDays.filter(d => periodKey(d, period) === k).pop()!;
 
-  const agg = (ms: Member[]) => aggregate(ms, rowsByAcc, rules, period, start, end);
+  const agg = (ms: Member[]) => aggregate(alive(ms, start), rowsByAcc, rules, period, start, end);
   const main = agg(members);
 
   const compare = compareOf(agg);
@@ -182,11 +202,11 @@ export async function summaryBundle(sb: SupabaseClient, opts: { day?: string; pe
     if (teams.length && loose.length) groups.push({ key: "none", name: "Без команды", curator: null, ms: loose });
     return groups.map(g => {
       const a = agg(g.ms);
-      return { key: g.key, name: g.name, curator: g.curator, count: g.ms.length, capital: a.capital, pnl: a.sum.pnl, pct: a.sum.pct, cum: a.sum.cum, cumPct: a.sum.cumPct, plus: a.sum.plus, minus: a.sum.minus, zones: a.zones, phases: a.phases };
+      return { key: g.key, name: g.name, curator: g.curator, count: a.count, capital: a.capital, pnl: a.sum.pnl, pct: a.sum.pct, cum: a.sum.cum, cumPct: a.sum.cumPct, plus: a.sum.plus, minus: a.sum.minus, zones: a.zones, phases: a.phases };
     }).sort((x, y) => y.pct - x.pct);
   }
   return {
-    ...base, empty: false as const, ...main, accs: accsOf(members), allDays, first, last, from: start, to: end, noDays: false as const,
+    ...base, empty: false as const, ...main, accs: accsOf(alive(members, start)), allDays, first, last, from: start, to: end, noDays: false as const,
     key, start, end, label: periodLabel(key, period, start, end), anchor: end,
     prev: ki > 0 ? lastDayOf(keys[ki - 1]) : null, next: ki < keys.length - 1 ? lastDayOf(keys[ki + 1]) : null,
     compare,

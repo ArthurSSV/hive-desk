@@ -14,7 +14,7 @@ export const dynamic = "force-dynamic";
 
 export default async function TraderCard({ params, searchParams }: { params: { id: string }; searchParams: { ok?: string; e?: string } }) {
   const { sb } = await requireAdmin();
-  const b = await traderBundle(sb, params.id);
+  const b = await traderBundle(sb, params.id, { archive: true });
   if (!b.profile) notFound();
   return (
     <>
@@ -46,6 +46,9 @@ export default async function TraderCard({ params, searchParams }: { params: { i
         </section>)}
       {searchParams.e === "migrate" && <div className="w l-red notice">Сначала выполните в Supabase SQL из файла supabase/migrations/011_manual_failed.sql.</div>}
       {["fail", "unfail"].includes(searchParams.ok || "") && <div className="w l-green notice">{searchParams.ok === "fail" ? "Счёт отмечен как Failed." : "Ручная отметка Failed снята."}</div>}
+      {searchParams.e === "migrate14" && <div className="w l-red notice">Сначала выполните в Supabase SQL из файла supabase/migrations/014_archive.sql.</div>}
+      {["archive", "unarchive"].includes(searchParams.ok || "") && <div className="w l-green notice">{searchParams.ok === "archive" ? "Счёт перенесён в архив. Его история остаётся в прошлых днях «Сводки»." : "Счёт возвращён из архива и снова отслеживается."}</div>}
+      {b.acc && (b.acc as any).archived && <div className="w l-yellow notice">Счёт #{b.acc.trader_login || b.acc.ctid_trader_account_id} в архиве: не синхронизируется и не показывается в «Группе». Ниже — его история.</div>}
       {["remove", "reject"].includes(searchParams.ok || "") && <div className="w l-green notice">{searchParams.ok === "remove" ? "Счёт удалён вместе с историей." : "Запрос на удаление отклонён."}</div>}
       {b.accounts.some(a => !a.removed) && (
         <section className="panel">
@@ -54,16 +57,19 @@ export default async function TraderCard({ params, searchParams }: { params: { i
             <div className="acc" key={a.id}>
               <div style={{ minWidth: 0 }}>
                 <b>#{a.trader_login || a.ctid_trader_account_id}</b> <span className="fine">{a.broker_name || ""} · {a.is_live ? "live" : "demo"}{a.balance != null ? ` · баланс ${usd(a.balance)}` : ""}</span>
-                <div className="fine">{a.active ? <span className="ok">Отслеживается · {PHASE_LABEL[a.phase]}</span> : "Не отслеживается"}</div>
+                <div className="fine">{(a as any).archived ? <span style={{ color: "var(--amber)" }}>В архиве · {PHASE_LABEL[a.phase]}{a.status === "failed" ? " · Failed" : ""}</span> : a.active ? <span className="ok">Отслеживается · {PHASE_LABEL[a.phase]}</span> : "Не отслеживается"}</div>
                 {a.delete_requested_at && <div className="fine" style={{ color: "var(--amber)" }}>⚠ Трейдер просит удалить счёт · {new Date(a.delete_requested_at).toLocaleString("ru-RU", { timeZone: viewerTz(), day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</div>}
               </div>
               <form action={adminAccountAction} style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
                 <input type="hidden" name="id" value={a.id} /><input type="hidden" name="user" value={params.id} />
+                {(a as any).archived
+                  ? <button className="btn ghost" type="submit" name="act" value="unarchive">Вернуть из архива</button>
+                  : <ConfirmButton name="act" value="archive" label="В архив" question="Перенести счёт в архив? Синхронизация остановится, история сохранится." yes="Да, в архив" />}
                 <ConfirmButton name="act" value="remove" label={a.delete_requested_at ? "Подтвердить удаление" : "Удалить"} question="Удалить счёт и всю его историю сделок?" />
                 {a.delete_requested_at && <button className="btn ghost" type="submit" name="act" value="reject">Отклонить</button>}
               </form>
             </div>))}</div>
-          <p className="fine" style={{ marginTop: 10 }}>Удалённый счёт пропадает вместе с историей. Если трейдер снова подключит его через cTrader, он появится как новый и будет ждать подтверждения баланса.</p>
+          <p className="fine" style={{ marginTop: 10 }}>Выбывший счёт отправляйте в архив: он уйдёт из «Группы», а его результаты останутся в прошлых днях «Сводки». Удаление — только для ошибочно подключённых счетов: удалённый счёт пропадает вместе с историей. Если трейдер снова подключит его через cTrader, он появится как новый и будет ждать подтверждения баланса.</p>
         </section>)}
       <TraderView b={b} mode="admin" />
       <section className="panel"><div className="ph"><h2>Участие в группе</h2></div><ConfirmRemove id={params.id} name={b.profile.name} /></section>

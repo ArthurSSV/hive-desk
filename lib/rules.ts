@@ -13,9 +13,10 @@ export type Rules = {
   redDaily: number;  // красный флаг: убыток за день от, %
   redDD: number;     // красный флаг: просадка от, %
   tz: string;        // часовой пояс торгового дня (сброс дневного лимита)
+  groupStart: string | null; // старт челленджа группы: с этого дня считается групповая статистика
 };
 
-export const DEFAULT_RULES: Rules = { p1: 8, p2: 5, daily: 5, max: 10, minDays: 3, profitDayPct: 0.5, zoneGreen1: 6, zoneGreen2: 4, zoneGreenF: 4, zoneYellow: -2, zoneRed: -5, redDaily: 3, redDD: 7, tz: "UTC" };
+export const DEFAULT_RULES: Rules = { p1: 8, p2: 5, daily: 5, max: 10, minDays: 3, profitDayPct: 0.5, zoneGreen1: 6, zoneGreen2: 4, zoneGreenF: 4, zoneYellow: -2, zoneRed: -5, redDaily: 3, redDD: 7, tz: "UTC", groupStart: "2026-11-09" };
 
 export function normalizeRules(r: Partial<Rules> | null | undefined): Rules {
   return { ...DEFAULT_RULES, ...(r || {}) };

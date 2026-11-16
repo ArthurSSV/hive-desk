@@ -40,8 +40,8 @@ export async function activateAccount(fd: FormData) {
   const id = Number(fd.get("id"));
   const phase = Number(fd.get("phase"));
   const initial = fd.get("initial") ? Number(fd.get("initial")) : null;
-  const { data: acc } = await sb.from("ctrader_accounts").select("id,balance_locked,removed").eq("id", id).eq("user_id", profile.id).single();
-  if (!acc || acc.removed) redirect("/connect");
+  const { data: acc } = await sb.from("ctrader_accounts").select("*").eq("id", id).eq("user_id", profile.id).single();
+  if (!acc || acc.removed || acc.archived) redirect("/connect");
   // У подтверждённого счёта поля этапа и баланса заблокированы и в форме не приходят
   if (!acc.balance_locked && (![1, 2, 3].includes(phase) || (initial != null && !(initial >= 100 && initial <= 10_000_000)))) redirect("/connect?error=" + encodeURIComponent("Проверьте этап и начальный баланс"));
   // Одновременно отслеживается один счёт — остальные выключаем (только реально включённые и не удалённые)
@@ -81,6 +81,7 @@ export async function saveRules(fd: FormData) {
   if (next.zoneRed > next.zoneYellow) [next.zoneRed, next.zoneYellow] = [next.zoneYellow, next.zoneRed];
   revalidatePath("/admin"); revalidatePath("/dashboard");
   const tz = String(fd.get("tz") || "").trim(); if (tz) { try { new Intl.DateTimeFormat("en", { timeZone: tz }); next.tz = tz; } catch {} }
+  if (fd.has("groupStart")) { const gs = String(fd.get("groupStart") || "").trim(); next.groupStart = /^\d{4}-\d{2}-\d{2}$/.test(gs) ? gs : null; }
   await sb.from("settings").update({ rules: normalizeRules(next) }).eq("id", 1);
   revalidatePath("/admin/rules");
   redirect("/admin/rules?saved=1");
@@ -162,6 +163,12 @@ export async function adminAccountAction(fd: FormData) {
   if (act === "remove") {
     // Счёт удаляется целиком вместе с историей; при новом подключении cTrader он появится снова как новый
     await sb.from("ctrader_accounts").delete().eq("id", id);
+  } else if (act === "archive" || act === "unarchive") {
+    // Архив: счёт перестаёт синхронизироваться и уходит из «Группы», история остаётся (колонка — миграция 014)
+    const on = act === "archive";
+    const { error } = await sb.from("ctrader_accounts").update(on ? { archived: true, archived_at: new Date().toISOString(), active: false } : { archived: false, archived_at: null, active: true }).eq("id", id);
+    if (error) redirect(`/admin/trader/${user}?e=migrate14`);
+    revalidatePath("/admin/summary");
   } else if (act === "reject") {
     await sb.from("ctrader_accounts").update({ delete_requested_at: null }).eq("id", id);
   } else if (act === "fail" || act === "unfail") {

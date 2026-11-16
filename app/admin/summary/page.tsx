@@ -260,7 +260,7 @@ export default async function Summary({ searchParams }: { searchParams: { day?: 
       <div className="head">
         <div>
           <div className="titlerow"><h1>{isAll ? "Сводка группы" : `Сводка · ${S.scope.name}`}</h1><span className="count">{S.label.short}</span></div>
-          <p className="sub" style={{ textTransform: day ? "capitalize" : undefined }}>{S.label.long}{!day ? ` · торговых дней ${sum.tradingDays}` : ""}</p>
+          <p className="sub" style={{ textTransform: day ? "capitalize" : undefined }}>{S.label.long}{!day ? ` · торговых дней ${sum.tradingDays}` : ""}{S.groupStart ? <span className="fine"> · челлендж группы с {S.groupStart.slice(8, 10)}.{S.groupStart.slice(5, 7)}</span> : null}</p>
           <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap", alignItems: "center" }}>
             <nav className="seg2" aria-label="Период" style={{ marginRight: 4 }}>{TABS.map(([p, l]) => <Link key={p} href={href(p)} aria-current={p === P ? "page" : undefined}>{l}</Link>)}</nav>
             <RangePicker from={S.from} to={S.to} min={S.first} max={S.last} active={P === "range"} base={rangeQ} />
