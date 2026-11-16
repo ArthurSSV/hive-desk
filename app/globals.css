@@ -399,7 +399,7 @@ th[aria-sort]{color:var(--gold)}
 .ctabs .cnt.red{background:var(--red-bg);color:var(--red);border-color:rgba(240,86,90,.4)}
 
 /* ---------- PDF: печать страницы ---------- */
-.printhead{display:none}
+.printhead,.printmini,.printonly{display:none}
 .pmenu{position:absolute;right:0;top:calc(100% + 6px);z-index:30;width:240px;display:grid;gap:4px;padding:8px;border-radius:12px;background:var(--surface);border:1px solid var(--gold-dim);box-shadow:0 14px 40px var(--shadow)}
 .pmenu button{all:unset;cursor:pointer;display:grid;padding:8px 10px;border-radius:8px} .pmenu button:hover,.pmenu button:focus-visible{background:var(--surface2)}
 .pmenu b{font-weight:800} .pmenu span{font-size:12px;color:var(--muted)} .pmenu p{margin:4px 10px 2px}
@@ -422,6 +422,14 @@ th[aria-sort]{color:var(--gold)}
   .panel,svg,tr,.strip>div,.kpis>div,.rad a,.an>div{break-inside:avoid}
   .panel:has(table){break-inside:auto}
   thead{display:table-header-group}
+  /* PDF «Сводки»: лист 1 — картина группы, лист 2 — «По дням», лист 3 — трейдеры */
+  .grid2:has(>.pg){display:block!important}
+  .pg{break-before:page;margin-top:0!important}
+  .grid2>.pg+.pg{margin-top:0!important}
+  .printmini{display:flex!important;justify-content:space-between;gap:12px;font-size:10px;color:var(--muted);border-bottom:1px solid var(--line2);padding-bottom:5px;margin-bottom:10px}
+  .printmini .brand{font-weight:800;color:var(--gold)}
+  th.printonly,td.printonly{display:table-cell!important}
+  .chart{max-height:88mm}
   a{color:inherit!important;text-decoration:none!important}
 }
 :root[data-print="light"]{--bg:#FFFFFF;--surface:#FFFFFF;--surface2:#FAF6EC;--sunk:#F6F0E2;--line:#E4D9C1;--line2:#CDBF9F;--fg:#1D180E;--muted:#6E6450;--gold:#8A5F08;--gold2:#6E4A04;--gold-dim:#C29B45;--accent-ink:#FFFFFF;--red:#BE2B2A;--red-bg:rgba(190,43,42,.10);--amber:#9A5C06;--amber-bg:rgba(154,92,6,.12);--green:#0F7A44;--green-bg:rgba(15,122,68,.10);--grey-bg:#EEE7D6;color-scheme:light}

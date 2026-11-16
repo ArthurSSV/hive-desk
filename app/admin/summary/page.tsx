@@ -165,7 +165,24 @@ export default async function Summary({ searchParams }: { searchParams: { day?: 
       </section>
 
       <div className="grid2">
-        <section className="panel">
+        <section className="panel pg" style={{ order: 2 }}>
+          <div className="printmini"><span className="brand">Матрёшка — Челлендж</span><span>{isAll ? "Сводка группы" : `Сводка · ${S.scope.name}`} · {titleFor}</span></div>
+          <div className="ph"><h2>По дням</h2>{P === "all" && <span className="fine">{S.table.length} дн.</span>}</div>
+          <div className="tablewrap" style={{ maxHeight: 560, overflowY: "auto" }}><table style={{ minWidth: 0 }}>
+            <thead><tr><th>Дата</th><th className="n">Итог дня</th><th className="n">Группа</th><th className="n">+ / −</th><th className="n printonly">Сделок</th><th className="printonly">Лучший</th></tr></thead>
+            <tbody>{S.table.map(r => (
+              <tr key={r.day} className={(S as any).failedByDay?.[r.day] ? "dead" : undefined} style={{ cursor: "default", background: day && r.day === S.end ? "rgba(232,181,74,.06)" : undefined }}>
+                <td className="mono"><Link href={href("day", r.day)} style={{ color: "inherit", textDecoration: "none" }}>{fmtD(r.day)}</Link>{(S as any).failedByDay?.[r.day] && <span className="fine neg"> ✕ {(S as any).failedByDay[r.day].join(", ")}</span>}</td>
+                <td className={`n ${cls(r.pnl)}`}>{money(r.pnl, true)}</td>
+                <td className={`n ${cls(r.cumPct)}`}>{sg(r.cumPct)}%</td>
+                <td className="n"><span className="pos">{r.plus}</span> / <span className="neg">{r.minus}</span></td>
+                <td className="n printonly">{r.trades}</td>
+                <td className="printonly">{(S as any).bestByDay?.[r.day] ? `${(S as any).bestByDay[r.day].name} +${(S as any).bestByDay[r.day].pct.toFixed(2)}%` : "—"}</td>
+              </tr>))}</tbody>
+          </table></div>
+        </section>
+        <section className="panel pg" style={{ order: 1 }}>
+          <div className="printmini"><span className="brand">Матрёшка — Челлендж</span><span>{isAll ? "Сводка группы" : `Сводка · ${S.scope.name}`} · {titleFor}</span></div>
           <div className="ph"><h2>Трейдеры {day ? `за ${S.label.short}` : FOR[P]}</h2><span className="fine">по результату {FOR[P]}</span></div>
           <div className="tablewrap"><table className="daytbl">
             <thead><tr><th>Трейдер</th><th>Этап</th><th className="n">Итог</th><th className="n">%</th>{!day && <th className="n">Дни + / −</th>}<th className="n">Итог фазы</th><th className="n">Сделки</th><th>Зона</th></tr></thead>
@@ -179,19 +196,6 @@ export default async function Summary({ searchParams }: { searchParams: { day?: 
                 <td className={`n ${cls(t.total ?? 0)}`}>{t.total == null ? "—" : `${sg(t.total)}%`}</td>
                 <td className="n">{t.trades || "—"}</td>
                 <td><Pill level={t.zone} /></td>
-              </tr>))}</tbody>
-          </table></div>
-        </section>
-        <section className="panel">
-          <div className="ph"><h2>По дням</h2>{P === "all" && <span className="fine">{S.table.length} дн.</span>}</div>
-          <div className="tablewrap" style={{ maxHeight: 560, overflowY: "auto" }}><table style={{ minWidth: 0 }}>
-            <thead><tr><th>Дата</th><th className="n">Итог дня</th><th className="n">Группа</th><th className="n">+ / −</th></tr></thead>
-            <tbody>{S.table.map(r => (
-              <tr key={r.day} style={{ cursor: "default", background: day && r.day === S.end ? "rgba(232,181,74,.06)" : undefined }}>
-                <td className="mono"><Link href={href("day", r.day)} style={{ color: "inherit", textDecoration: "none" }}>{fmtD(r.day)}</Link></td>
-                <td className={`n ${cls(r.pnl)}`}>{money(r.pnl, true)}</td>
-                <td className={`n ${cls(r.cumPct)}`}>{sg(r.cumPct)}%</td>
-                <td className="n"><span className="pos">{r.plus}</span> / <span className="neg">{r.minus}</span></td>
               </tr>))}</tbody>
           </table></div>
         </section>
@@ -256,6 +260,7 @@ export default async function Summary({ searchParams }: { searchParams: { day?: 
     </div>);
   return (
     <>
+      <style>{`@page{@bottom-left{content:"Матрёшка · Сводка";font-size:9px;color:#8a7f66}@bottom-right{content:counter(page) " / " counter(pages);font-size:9px;color:#8a7f66}}`}</style>
       <div className="printhead"><span className="brand">Матрёшка — Челлендж</span><span>{isAll ? "Сводка группы" : `Сводка · ${S.scope.name}`} · {titleFor} · <span id="printstamp" /></span></div>
       <div className="head">
         <div>
