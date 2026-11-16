@@ -109,4 +109,12 @@ assert.equal(isProfitDay(-0.5, 0.5, 1), false); // отыграл минус, н
 assert.equal(isProfitDay(-0.5, 1.2, 1), true);  // над стартом +1.2%
 assert.equal(isProfitDay(-3, -1.5, 1), false);  // весь день ниже старта
 
+// Сделка = позиция: два входа в одну позицию и добор на следующий день — одна сделка, лот суммируется
+{
+  const pd = (day: string, id: number, close: boolean, profit = 0, lots = 0.5) => ({ ...deal(day, profit, close, lots), position_id: id });
+  const x = computeAccount({ phase: 1, initialBalance: 10000, rules: R, startDay: "2026-11-02", today: "2026-11-03", journal: [],
+    deals: [pd("2026-11-02", 1, false), pd("2026-11-02", 1, false), pd("2026-11-02", 2, false), pd("2026-11-02", 1, true, 5), pd("2026-11-03", 2, false), pd("2026-11-03", 2, true, 5, 1)] });
+  assert.equal(x.days[0].trades, 2); assert.equal(x.days[0].max_lot, 1);
+  assert.equal(x.days[1].trades, 0);
+}
 console.log("engine: все проверки пройдены");

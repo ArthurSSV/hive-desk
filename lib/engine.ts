@@ -2,7 +2,7 @@
 // Чистые функции, без обращения к базе — используется воркером и тестом.
 import { zoneOf, type Rules, type Zone } from "./rules";
 
-export type DealRow = { exec_ts: string; is_close: boolean; net_profit: number; volume: number | null; lots?: number | null };
+export type DealRow = { exec_ts: string; is_close: boolean; net_profit: number; volume: number | null; lots?: number | null; position_id?: number | null };
 export type JournalRow = { day: string; mood: number | null; plan: boolean | null };
 export type Flag = { lv: "red" | "yellow"; t: string };
 export type Level = Zone;
@@ -87,6 +87,24 @@ export function computeAccount(opts: {
     if (!byDay.has(k)) byDay.set(k, []);
     byDay.get(k)!.push(d);
   }
+  // Сделка = позиция (номер позиции cTrader): несколько ордеров на вход в одну позицию — одна сделка.
+  // Считается в день первого входа, лот — сумма всех входов в позицию.
+  const lotOf = (d: DealRow) => (d.lots != null ? Number(d.lots) : volumeToLots(d.volume));
+  const posDay = new Map<number, string>(), posLots = new Map<number, number>();
+  for (const d of [...opts.deals].sort((a, b) => a.exec_ts.localeCompare(b.exec_ts))) {
+    if (d.is_close || d.position_id == null) continue;
+    if (!posDay.has(d.position_id)) posDay.set(d.position_id, dayKey(new Date(d.exec_ts), R.tz));
+    posLots.set(d.position_id, (posLots.get(d.position_id) || 0) + lotOf(d));
+  }
+  const tradesOf = (opens: DealRow[], day: string) => {
+    const seen = new Set<number>(); const lots: number[] = []; let n = 0;
+    for (const d of opens) {
+      if (d.position_id == null) { n++; lots.push(lotOf(d)); continue; }
+      if (seen.has(d.position_id) || posDay.get(d.position_id) !== day) continue;
+      seen.add(d.position_id); n++; lots.push(posLots.get(d.position_id) || 0);
+    }
+    return { n, maxLot: Math.max(0, ...lots) };
+  };
   const jmap = new Map(opts.journal.map(j => [j.day, j]));
   const firstDeal = [...byDay.keys()].sort()[0];
   const start = firstDeal && firstDeal < opts.startDay ? firstDeal : opts.startDay;
@@ -104,6 +122,7 @@ export function computeAccount(opts: {
     const list = byDay.get(day) || [];
     const pnl = list.reduce((a, d) => a + Number(d.net_profit || 0), 0);
     const opens = list.filter(d => !d.is_close);
+    const tr = tradesOf(opens, day);
     const traded = list.length > 0;
 
     const dayStart = bal;
@@ -117,8 +136,8 @@ export function computeAccount(opts: {
       pnl_pct: r2((pnl / init) * 100),
       total_pct: r2(((bal - init) / init) * 100),
       end_balance: r2(bal),
-      trades: opens.length,
-      max_lot: r2(Math.max(0, ...opens.map(d => (d.lots != null ? Number(d.lots) : volumeToLots(d.volume))))),
+      trades: tr.n,
+      max_lot: r2(tr.maxLot),
       mood: j?.mood ?? null,
       plan: j?.plan ?? null,
       checkin: !!j,
