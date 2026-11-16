@@ -1,6 +1,9 @@
 import { requireAdmin } from "@/lib/supabase";
 import { rulesOf } from "@/lib/data";
-import { saveInvite, saveRules, setSelfTrader } from "@/app/actions";
+import { saveInvite, saveRules, setSelfTrader, guideSaveText } from "@/app/actions";
+import GuideUpload from "@/components/GuideUpload";
+import { GUIDE_BUCKET } from "@/lib/rules";
+import { supabaseUrl, anonKey } from "@/lib/env";
 
 export const dynamic = "force-dynamic";
 
@@ -44,6 +47,22 @@ export default async function RulesPage({ searchParams }: { searchParams: { save
         <p className="fine" style={{ marginTop: 10 }}>Без кода зарегистрироваться нельзя. Ссылка с кодом — на странице «Группа», кнопка «Скопировать ссылку для регистрации». Новый код не влияет на тех, кто уже зарегистрирован. Пустое поле открывает регистрацию всем.</p>
         {searchParams.saved === "invite" && <p className="saved" style={{ marginTop: 6 }}>Код сохранён</p>}
       </section>
+      <section className="panel" id="guide">
+        <div className="ph"><h2>Материалы для трейдеров</h2><span className="fine">кнопка в шапке · файл открывают только вошедшие</span></div>
+        <div style={{ display: "grid", gap: 14 }}>
+          <GuideUpload url={supabaseUrl()} anon={anonKey()} bucket={GUIDE_BUCKET} current={{ name: R.guide.name, size: R.guide.size, at: R.guide.at }} />
+          <form action={guideSaveText} style={{ display: "grid", gap: 12 }}>
+            <div className="rules">
+              <label htmlFor="g-title">Название на кнопке<input id="g-title" name="title" maxLength={60} defaultValue={R.guide.title} /></label>
+              <label htmlFor="g-note">Подпись<input id="g-note" name="note" maxLength={60} defaultValue={R.guide.note} placeholder="автор Артур" /></label>
+            </div>
+            <label style={{ display: "flex", gap: 8, alignItems: "center" }}><input type="checkbox" name="show" value="1" defaultChecked={R.guide.show} /> Показывать трейдерам в шапке</label>
+            <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}><button className="btn" type="submit">Сохранить</button>
+              {R.guide.file && <a className="linkbtn" href="/guide" target="_blank" rel="noopener">Открыть файл ↗</a>}
+              {searchParams.saved === "guide" && <span className="saved">Сохранено</span>}</div>
+          </form>
+        </div>
+      </section>
       <form action={saveRules} style={{ display: "grid", gap: 20 }}>
         <section className="panel"><div className="ph"><h2>Зоны светофора</h2><span className="fine">по результату фазы, % от начального баланса</span></div>
           <div className="zones">
@@ -78,7 +97,7 @@ export default async function RulesPage({ searchParams }: { searchParams: { save
           </div>
           <p className="fine" style={{ marginTop: 10 }}>Трейдеры со срочными флагами попадают в «Требуют внимания» даже в зелёной зоне.</p>
         </section>
-        <div style={{ display: "flex", gap: 12, alignItems: "center" }}><button className="btn" type="submit">Сохранить</button>{searchParams.saved && !["invite", "self"].includes(searchParams.saved) && <span className="saved">Сохранено</span>}</div>
+        <div style={{ display: "flex", gap: 12, alignItems: "center" }}><button className="btn" type="submit">Сохранить</button>{searchParams.saved && !["invite", "self", "guide"].includes(searchParams.saved) && <span className="saved">Сохранено</span>}</div>
       </form>
     </>
   );

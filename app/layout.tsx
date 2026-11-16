@@ -7,6 +7,7 @@ import NotificationBell from "@/components/NotificationBell";
 import TzCookie from "@/components/TzCookie";
 import ThemeToggle from "@/components/ThemeToggle";
 import { cookies } from "next/headers";
+import { normalizeRules } from "@/lib/rules";
 
 export const metadata: Metadata = { title: "Матрёшка — Челлендж", description: "Отчётность группы по проп-челленджу" };
 
@@ -15,6 +16,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const { data: { user } } = await sb.auth.getUser();
   const { data: profile } = user ? await sb.from("profiles").select("role,name,is_trader").eq("id", user.id).single() : { data: null };
   const admin = profile?.role === "admin";
+  // Кнопка материала для трейдеров (и админов, которые тоже торгуют)
+  const trader = !!profile && (!admin || !!profile.is_trader);
+  const guide = trader ? normalizeRules((await sb.from("settings").select("rules").eq("id", 1).single()).data?.rules).guide : null;
   const theme = cookies().get("theme")?.value === "light" ? "light" : "dark";
   return (
     <html lang="ru" data-theme={theme}>
@@ -29,6 +33,11 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             <svg width="24" height="28" viewBox="0 0 24 28" aria-hidden="true"><path d="M12 1.5c3.3 0 5.6 2.6 5.6 5.7 0 1.3-.4 2.4-1 3.4 2.6 1.6 4.4 4.6 4.4 8.3 0 5-4 7.6-9 7.6s-9-2.6-9-7.6c0-3.7 1.8-6.7 4.4-8.3-.6-1-1-2.1-1-3.4 0-3.1 2.3-5.7 5.6-5.7z" fill="none" stroke="var(--gold)" strokeWidth="1.6" /><circle cx="12" cy="7.4" r="2.6" fill="var(--gold)" /><path d="M7.6 18.6c1.2 1.6 2.8 2.4 4.4 2.4s3.2-.8 4.4-2.4" fill="none" stroke="var(--gold)" strokeWidth="1.6" strokeLinecap="round" /></svg>
             Матрёшка — Челлендж
           </Link>
+          {guide?.show && guide.file && (
+            <a className="guide" href="/guide" target="_blank" rel="noopener" title="Откроется PDF, его можно скачать">
+              <span className="ic" aria-hidden="true"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 4v11" /><path d="m7 10 5 5 5-5" /><path d="M5 20h14" /></svg></span>
+              <span><b>{guide.title}</b><small>PDF{guide.note ? ` · ${guide.note}` : ""}</small></span>
+            </a>)}
           {user && (
             <nav className="tabs" aria-label="Разделы">
               {admin && <Link href="/admin">Группа</Link>}

@@ -14,12 +14,18 @@ export type Rules = {
   redDD: number;     // красный флаг: просадка от, %
   tz: string;        // часовой пояс торгового дня (сброс дневного лимита)
   groupStart: string | null; // старт челленджа группы: с этого дня считается групповая статистика
+  guide: Guide | null; // материал для трейдеров: кнопка в шапке
 };
 
-export const DEFAULT_RULES: Rules = { p1: 8, p2: 5, daily: 5, max: 10, minDays: 3, profitDayPct: 0.5, zoneGreen1: 6, zoneGreen2: 4, zoneGreenF: 4, zoneYellow: -2, zoneRed: -5, redDaily: 3, redDD: 7, tz: "UTC", groupStart: "2026-11-09" };
+export type Guide = { title: string; note: string; show: boolean; file: string | null; name: string | null; size: number | null; at: string | null };
+export const DEFAULT_GUIDE: Guide = { title: "Выход из просадки", note: "автор Артур", show: true, file: null, name: null, size: null, at: null };
+export const GUIDE_BUCKET = "materials";
+
+export const DEFAULT_RULES: Rules = { p1: 8, p2: 5, daily: 5, max: 10, minDays: 3, profitDayPct: 0.5, zoneGreen1: 6, zoneGreen2: 4, zoneGreenF: 4, zoneYellow: -2, zoneRed: -5, redDaily: 3, redDD: 7, tz: "UTC", groupStart: "2026-11-09", guide: null };
 
 export function normalizeRules(r: Partial<Rules> | null | undefined): Rules {
-  return { ...DEFAULT_RULES, ...(r || {}) };
+  const x = { ...DEFAULT_RULES, ...(r || {}) };
+  return { ...x, guide: { ...DEFAULT_GUIDE, ...(x.guide || {}) } };
 }
 
 export const PHASE_LABEL: Record<number, string> = { 1: "Фаза 1", 2: "Фаза 2", 3: "Funded" };

@@ -6,7 +6,7 @@ import { createClient } from "@supabase/supabase-js";
 import { supabaseUrl, anonKey, appUrl } from "@/lib/env";
 import { dayKey, journalDays } from "@/lib/engine";
 import { syncAll, loadRules, recompute } from "@/lib/sync";
-import { normalizeRules } from "@/lib/rules";
+import { normalizeRules, GUIDE_BUCKET } from "@/lib/rules";
 
 export async function signOut() {
   await userClient().auth.signOut();
@@ -205,4 +205,49 @@ export async function sendPasswordReset(fd: FormData) {
   const site = appUrl() || "https://hive-desk-nu.vercel.app";
   const { error } = await anon.auth.resetPasswordForEmail(p!.email, { redirectTo: `${site}/auth/confirm?next=/reset` });
   redirect(`/admin/trader/${user}?${error ? "e=reset" : "ok=reset"}`);
+}
+
+// ---------- Материал для трейдеров (кнопка в шапке) ----------
+async function guideOf(sb: any) {
+  const { data } = await sb.from("settings").select("rules").eq("id", 1).single();
+  return { raw: (data?.rules || {}) as any, guide: normalizeRules(data?.rules).guide! };
+}
+
+/** Ссылка для загрузки PDF напрямую в закрытое хранилище (мимо лимита размера запроса Vercel). */
+export async function guideUploadUrl(name: string, size: number): Promise<{ path: string; token: string } | { error: string }> {
+  await requireAdmin();
+  if (!/\.pdf$/i.test(name)) return { error: "Нужен файл PDF" };
+  if (!(size > 0 && size <= 50 * 1024 * 1024)) return { error: "Файл больше 50 МБ" };
+  const svc = serviceClient();
+  const { error: be } = await svc.storage.createBucket(GUIDE_BUCKET, { public: false });
+  if (be && !/exist/i.test(be.message)) return { error: "Хранилище: " + be.message };
+  const path = `guide/${Date.now()}.pdf`;
+  const { data, error } = await svc.storage.from(GUIDE_BUCKET).createSignedUploadUrl(path);
+  if (error || !data) return { error: error?.message || "Не удалось подготовить загрузку" };
+  return { path, token: data.token };
+}
+
+/** После загрузки: запоминаем новый файл и удаляем прежний. */
+export async function guideSaveFile(path: string, name: string, size: number) {
+  await requireAdmin();
+  if (!/^guide\/\d+\.pdf$/.test(path)) return { error: "Неверный путь" };
+  const svc = serviceClient();
+  const { raw, guide } = await guideOf(svc);
+  const old = guide.file;
+  const next = { ...guide, file: path, name: name.slice(0, 200), size, at: new Date().toISOString() };
+  await svc.from("settings").update({ rules: { ...raw, guide: next } }).eq("id", 1);
+  if (old && old !== path) await svc.storage.from(GUIDE_BUCKET).remove([old]);
+  revalidatePath("/", "layout");
+  return { ok: true };
+}
+
+export async function guideSaveText(fd: FormData) {
+  await requireAdmin();
+  const svc = serviceClient();
+  const { raw, guide } = await guideOf(svc);
+  const title = String(fd.get("title") || "").trim().slice(0, 60) || guide.title;
+  const note = String(fd.get("note") || "").trim().slice(0, 60);
+  await svc.from("settings").update({ rules: { ...raw, guide: { ...guide, title, note, show: fd.get("show") === "1" } } }).eq("id", 1);
+  revalidatePath("/", "layout");
+  redirect("/admin/rules?saved=guide#guide");
 }
