@@ -1,6 +1,7 @@
 "use client";
 // Картинка-сводка 1080×1080 для публикации: рисуется на canvas в браузере, без сервера.
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { drawTop, type TopData } from "./topCard";
 
 export type CardData = {
   file: string;                    // имя файла без .png
@@ -122,43 +123,93 @@ export async function drawCard(d: CardData): Promise<HTMLCanvasElement> {
   return cv;
 }
 
-export default function ShareImage({ data }: { data: CardData }) {
+type Kind = "sum" | "top";
+
+export default function ShareImage({ data, top }: { data: CardData; top?: TopData | null }) {
   const [url, setUrl] = useState<string | null>(null), [blob, setBlob] = useState<Blob | null>(null);
   const [busy, setBusy] = useState(false), [msg, setMsg] = useState("");
-  async function open() {
+  const [menu, setMenu] = useState(false), [thumbs, setThumbs] = useState<Record<Kind, string>>({} as any);
+  const [kind, setKind] = useState<Kind>("sum"), [story, setStory] = useState(false), [usdOn, setUsd] = useState(false);
+  const wrap = useRef<HTMLSpanElement>(null);
+  useEffect(() => {
+    if (!menu) return;
+    const off = (e: MouseEvent) => { if (!wrap.current?.contains(e.target as Node)) setMenu(false); };
+    const esc = (e: KeyboardEvent) => { if (e.key === "Escape") setMenu(false); };
+    document.addEventListener("mousedown", off); document.addEventListener("keydown", esc);
+    return () => { document.removeEventListener("mousedown", off); document.removeEventListener("keydown", esc); };
+  }, [menu]);
+
+  const render = (k: Kind, o: { story: boolean; usd: boolean }) => (k === "top" && top ? drawTop(top, o) : drawCard(data));
+  async function build(k: Kind, o = { story, usd: usdOn }) {
     setBusy(true); setMsg("");
     try {
-      const cv = await drawCard(data);
+      const cv = await render(k, o);
       const b = await new Promise<Blob | null>(r => cv.toBlob(r, "image/png"));
       if (!b) throw new Error();
-      setBlob(b); setUrl(URL.createObjectURL(b));
+      if (url) URL.revokeObjectURL(url);
+      setKind(k); setBlob(b); setUrl(URL.createObjectURL(b));
     } catch { setMsg("Не удалось собрать картинку. Обновите страницу и попробуйте ещё раз."); }
     setBusy(false);
+  }
+  async function openMenu() {
+    if (!top) return build("sum");
+    const next = !menu; setMenu(next);
+    if (next && !thumbs.sum) {
+      try {
+        const [a, b] = await Promise.all([drawCard(data), drawTop(top)]);
+        const small = (cv: HTMLCanvasElement) => { const t = document.createElement("canvas"); t.width = 144; t.height = 144; t.getContext("2d")!.drawImage(cv, 0, 0, 144, 144); return t.toDataURL("image/png"); };
+        setThumbs({ sum: small(a), top: small(b) });
+      } catch { /* без превью */ }
+    }
   }
   function close() { if (url) URL.revokeObjectURL(url); setUrl(null); setBlob(null); setMsg(""); }
   async function copy() {
     try { await navigator.clipboard.write([new ClipboardItem({ "image/png": blob! })]); setMsg("Картинка скопирована — вставьте её в чат"); }
     catch { setMsg("Браузер не разрешил копирование. Нажмите «Скачать PNG»."); }
   }
+  const seg = <T extends string | boolean>(cur: T, opts: [T, string][], set: (v: T) => void, label: string) => (
+    <span className="tfs" role="group" aria-label={label}>{opts.map(([v, l]) => <button key={String(v)} type="button" aria-pressed={cur === v} disabled={busy} onClick={() => set(v)}>{l}</button>)}</span>);
+  const items: { k: Kind; t: string; d: string }[] = [
+    { k: "sum", t: "Сводка группы", d: "Итог, график, плитки и зоны" },
+    ...(top ? [{ k: "top" as Kind, t: top.caption, d: "Лидер крупно и рейтинг пяти лучших" }] : []),
+  ];
+  const fileName = kind === "top" && top ? `${top.file}${story ? "-stories" : ""}${usdOn ? "-usd" : ""}` : data.file;
   return (
-    <>
-      <button className="btn ghost" type="button" onClick={open} disabled={busy}>{busy ? "Собираю…" : "Картинка для публикации"}</button>
+    <span ref={wrap} style={{ position: "relative", display: "inline-flex" }}>
+      <button className="btn ghost" type="button" onClick={openMenu} disabled={busy && !url} aria-haspopup={top ? "menu" : undefined} aria-expanded={top ? menu : undefined}>
+        {busy && !url ? "Собираю…" : <>Картинка для публикации{top && <span aria-hidden="true" style={{ marginLeft: 6 }}>▾</span>}</>}
+      </button>
+      {menu && (
+        <div className="sharemenu" role="menu">
+          {items.map(it => (
+            <button key={it.k} type="button" role="menuitem" className="shareitem" onClick={() => { setMenu(false); build(it.k); }}>
+              {thumbs[it.k] ? /* eslint-disable-next-line @next/next/no-img-element */ <img src={thumbs[it.k]} alt="" width={72} height={72} /> : <span className="thumbph" />}
+              <span><b>{it.t}</b><span>{it.d}</span></span>
+            </button>))}
+        </div>)}
       {msg && !url && <span className="err">{msg}</span>}
       {url && (
         <div role="dialog" aria-modal="true" aria-label="Картинка для публикации" onClick={e => e.target === e.currentTarget && close()}
           style={{ position: "fixed", inset: 0, zIndex: 40, background: "rgba(0,0,0,.72)", display: "grid", placeItems: "center", padding: 16 }}>
-          <div className="panel" style={{ width: "min(560px, 100%)", display: "grid", gap: 14 }}>
+          <div className="panel" style={{ width: "min(560px, 100%)", maxHeight: "calc(100vh - 32px)", overflow: "auto", display: "grid", gap: 14 }}>
             <div className="ph" style={{ margin: 0 }}><h2>Картинка для публикации</h2><button type="button" className="signout" style={{ margin: 0 }} onClick={close}>Закрыть</button></div>
+            {top && <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              {seg<Kind>(kind, [["sum", "Сводка"], ["top", top.caption]], k => build(k), "Вариант")}
+              {kind === "top" && <>
+                {seg<boolean>(story, [[false, "Квадрат"], [true, "Сторис"]], v => { setStory(v); build("top", { story: v, usd: usdOn }); }, "Формат")}
+                {seg<boolean>(usdOn, [[false, "Только %"], [true, "% и $"]], v => { setUsd(v); build("top", { story, usd: v }); }, "Доллары")}
+              </>}
+            </div>}
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={url} alt="Сводка группы" style={{ width: "100%", borderRadius: 10, display: "block" }} />
+            <img src={url} alt={kind === "top" ? "Топ-5" : "Сводка группы"} style={{ width: kind === "top" && story ? "min(100%, 300px)" : "100%", margin: "0 auto", borderRadius: 10, display: "block", opacity: busy ? 0.5 : 1 }} />
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-              <a className="btn" href={url} download={`${data.file}.png`}>Скачать PNG</a>
+              <a className="btn" href={url} download={`${fileName}.png`}>Скачать PNG</a>
               <button className="btn ghost" type="button" onClick={copy}>Скопировать картинку</button>
               {msg && <span className="fine">{msg}</span>}
             </div>
-            <p className="fine" style={{ margin: 0 }}>1080×1080 — подходит для Telegram и Instagram.</p>
+            <p className="fine" style={{ margin: 0 }}>{kind === "top" && story ? "1080×1920 — для сторис." : "1080×1080 — подходит для Telegram и Instagram."}</p>
           </div>
         </div>)}
-    </>
+    </span>
   );
 }

@@ -9,6 +9,7 @@ import { LEVEL_LABEL, PHASE_LABEL } from "@/lib/rules";
 import { GroupChart, Pill, cls, fmtD, sg } from "@/components/ui";
 import CopyReport from "@/components/CopyReport";
 import ShareImage, { type CardData } from "@/components/ShareImage";
+import type { TopData } from "@/components/topCard";
 import WeekCollage, { type CollageData } from "@/components/WeekCollage";
 import PrintPdf from "@/components/PrintPdf";
 import ScopePicker from "@/components/ScopePicker";
@@ -89,6 +90,18 @@ export default async function Summary({ searchParams }: { searchParams: { day?: 
     best: best ? `${best.name} ${sg(best.pnlPct!)}%` : null,
     phases: { p2: S.phases.p2, funded: S.phases.funded, failed: S.phases.failed },
   };
+
+  // Картинка «Топ-5»: первая колонка из PDF (топ дня / недели / месяца / периода)
+  const t0 = (S as any).tops?.[0] as { title: string; rows: TopData["rows"] } | undefined;
+  const traded = sum.plus + sum.minus;
+  const top: TopData | null = t0 ? {
+    file: `matryoshka-top5-${isAll ? "" : S.scope.key + "-"}${P}-${S.key}`,
+    caption: (isAll ? "" : S.scope.short + " · ") + t0.title, date: card.date,
+    lead: day ? "ЛИДЕР ДНЯ" : P === "week" ? "ЛИДЕР НЕДЕЛИ" : P === "month" ? "ЛИДЕР МЕСЯЦА" : "ЛИДЕР ПЕРИОДА",
+    rows: t0.rows,
+    footLeft: S.groupStart ? `Челлендж группы с ${fmtD(S.groupStart)}` : "Матрёшка — Челлендж",
+    footRight: `в плюсе ${sum.plus} из ${traded} ${traded % 10 === 1 && traded % 100 !== 11 ? "трейдера" : "трейдеров"}`,
+  } : null;
 
   // Коллаж: неделя или свой период до 7 торговых дней
   const wkDays = P === "week" || (P === "range" && sum.tradingDays <= 7) ? [...S.table].reverse().filter(r => r.day >= S.start && r.day <= S.end) : [];
@@ -291,7 +304,7 @@ export default async function Summary({ searchParams }: { searchParams: { day?: 
           </div>
         </div>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-start", justifyContent: "flex-end" }}>
-          <ShareImage data={card} />
+          <ShareImage data={card} top={top} />
           {collage && <WeekCollage data={collage} />}
           <PrintPdf />
           <CopyReport text={report} />

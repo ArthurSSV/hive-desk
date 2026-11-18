@@ -21,6 +21,11 @@ a{color:var(--gold)}
 /* header */
 header.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:rgba(5,5,5,.88);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
 header.top .wrap{display:flex;align-items:center;gap:16px;padding-block:12px;flex-wrap:wrap}
+.sharemenu{position:absolute;top:calc(100% + 8px);left:0;z-index:30;width:min(340px,calc(100vw - 32px));background:var(--surface);border:1px solid var(--line2);border-radius:14px;box-shadow:0 18px 50px rgba(0,0,0,.45);padding:6px;display:grid;gap:2px}
+.shareitem{display:grid;grid-template-columns:72px 1fr;gap:12px;align-items:center;padding:8px;border-radius:10px;border:1px solid transparent;background:none;color:var(--fg);font:inherit;text-align:left;cursor:pointer}
+.shareitem:hover,.shareitem:focus-visible{background:rgba(232,181,74,.08);border-color:var(--line2);outline:none}
+.shareitem img,.shareitem .thumbph{width:72px;height:72px;border-radius:8px;border:1px solid var(--line);display:block;background:#050505}
+.shareitem b{display:block;font-size:14px}.shareitem span span{color:var(--muted);font-size:12px}
 .guide{display:inline-flex;align-items:center;gap:9px;border:1px solid var(--gold);background:rgba(232,181,74,.08);color:var(--fg);border-radius:10px;padding:5px 12px 5px 8px;text-decoration:none;line-height:1.15;transition:background .15s}
 .guide:hover{background:rgba(232,181,74,.18)}
 .guide .ic{width:26px;height:26px;border-radius:7px;background:var(--gold);color:var(--accent-ink);display:grid;place-items:center;flex:none}
