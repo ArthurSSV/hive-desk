@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { timingSafeEqual } from "node:crypto";
 import { serviceClient } from "@/lib/supabase";
-import { syncAll } from "@/lib/sync";
+import { syncAll, weekendSkip } from "@/lib/sync";
 
 // Вызывается внешним планировщиком (cron-job.org) раз в 5–15 минут.
 // За один вызов обновляются счета, которые дольше всех ждали, пока хватает времени.
@@ -21,9 +21,7 @@ async function run(req: NextRequest) {
   if (!authorized(req)) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   const t0 = Date.now(), lines: string[] = [];
   // Выходные (пт 21:00 — вс 21:00 UTC): рынок закрыт, синхронизируем раз в час — первым запуском часа
-  const now = new Date(), wd = now.getUTCDay(), h = now.getUTCHours();
-  const weekend = wd === 6 || (wd === 0 && h < 21) || (wd === 5 && h >= 21);
-  if (weekend && now.getUTCMinutes() >= 5 && req.nextUrl.searchParams.get("force") !== "1") return NextResponse.json({ skipped: "weekend" });
+  if (weekendSkip() && req.nextUrl.searchParams.get("force") !== "1") return NextResponse.json({ skipped: "weekend" });
   try {
     // light: без изменений на счёте свечи, ордера и пересчёт истории пропускаются (экономия CPU Vercel)
     const r = await syncAll(serviceClient(), { budgetMs: 20_000, concurrency: 4, light: true, log: s => lines.push(s) });

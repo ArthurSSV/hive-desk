@@ -290,6 +290,13 @@ async function notify(sb: SupabaseClient, acc: Account, out: Awaited<ReturnType<
 
 /** Синхронизирует все активные счета (или счета одного трейдера). */
 /** budgetMs — лимит времени: счета идут от давно не обновлявшихся, остальные подождут следующего запуска. */
+/** Выходные (пт 21:00 — вс 21:00 UTC): рынок закрыт — крон синхронизирует раз в час, первым запуском часа. */
+export function weekendSkip(now = new Date()) {
+  const wd = now.getUTCDay(), h = now.getUTCHours();
+  const weekend = wd === 6 || (wd === 0 && h < 21) || (wd === 5 && h >= 21);
+  return weekend && now.getUTCMinutes() >= 5;
+}
+
 /** light — режим крона: полная синхронизация раз в час (первый запуск часа), в остальное время только при изменениях. */
 export async function syncAll(sb: SupabaseClient, opts: { userId?: string; log?: (s: string) => void; budgetMs?: number; concurrency?: number; light?: boolean } = {}) {
   const log = opts.log || (() => {});
