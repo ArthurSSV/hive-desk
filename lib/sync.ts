@@ -51,7 +51,9 @@ export async function openAccount(sb: SupabaseClient, acc: Pick<Account, "user_i
 }
 
 /** Тянет новые сделки одного счёта из cTrader. */
-async function pullDeals(sb: SupabaseClient, acc: Account) {
+/** full = false: лёгкий режим крона. Если со времени прошлого запуска ничего не изменилось
+ *  (нет новых сделок, открытых позиций, смены баланса, прав и дня) — свечи, ордера и пересчёт пропускаются. */
+async function pullDeals(sb: SupabaseClient, acc: Account, full = true, tz = "UTC"): Promise<{ initial: number | null; changed: boolean }> {
   const c = await openAccount(sb, acc);
   try {
     const trader = await c.trader(acc.ctid_trader_account_id);
@@ -63,9 +65,29 @@ async function pullDeals(sb: SupabaseClient, acc: Account) {
     const { count: missing } = await sb.from("deals").select("deal_id", { count: "exact", head: true }).eq("account_id", acc.id).or("lots.is.null,and(is_close.eq.true,conv.is.null),and(is_close.eq.false,net_profit.neq.0)");
     const from = last?.[0] && !missing ? new Date(last[0].exec_ts).getTime() - 3600_000 : Date.now() - HISTORY_DAYS * 86400_000;
     const raw = await c.deals(acc.ctid_trader_account_id, from, Date.now());
-    const mapped = raw
+    const all = raw
       .map(d => mapDeal(d, md))
       .filter(d => d.status === undefined || d.status === 2 || d.status === 3 || d.status === "FILLED" || d.status === "PARTIALLY_FILLED");
+    // Сделки из окна «последний час», которые уже сохранены, повторно не пишем и названия символов для них не грузим
+    let mapped = all;
+    if (last?.[0] && !missing && all.length) {
+      const { data: known } = await sb.from("deals").select("deal_id").eq("account_id", acc.id).in("deal_id", all.map(d => d.deal_id));
+      const k = new Set((known || []).map((x: any) => String(x.deal_id)));
+      mapped = all.filter(d => !k.has(String(d.deal_id)));
+    }
+    const access = accessOf(trader.accessRights);
+    const open = await c.openPositions(acc.ctid_trader_account_id).catch(() => [] as any[]);
+    const today = dayKey(new Date(), tz), wdToday = new Date(today + "T12:00:00Z").getUTCDay();
+    const { data: lastDay } = await sb.from("daily_stats").select("day").eq("account_id", acc.id).order("day", { ascending: false }).limit(1);
+    // Открытая позиция сама по себе меняет только эквити дня — её освежаем раз в 15 минут, а не каждый запуск
+    const openTick = open.length > 0 && new Date().getUTCMinutes() % 15 < 5;
+    const changed = full || mapped.length > 0 || !!missing || openTick || acc.initial_balance == null
+      || !(Math.abs(balance - Number((acc as any).balance)) < 0.005) || access !== (acc.access_rights || "full")
+      || (wdToday !== 0 && wdToday !== 6 && lastDay?.[0]?.day !== today); // строки дней — только будни: новый будний день пересчитываем
+    if (!changed) {
+      await sb.from("ctrader_accounts").update({ last_synced_at: new Date().toISOString(), sync_error: null }).eq("id", acc.id);
+      return { initial: acc.initial_balance, changed: false };
+    }
     const ids = [...new Set(mapped.map(d => d.symbol_id).filter((x): x is number => x != null))];
     const names = ids.length ? await c.symbolNames(acc.ctid_trader_account_id).catch(() => new Map<number, string>()) : new Map<number, string>();
     const lotSz = ids.length ? await c.lotSizes(acc.ctid_trader_account_id, ids).catch(() => new Map<number, number>()) : new Map<number, number>();
@@ -91,13 +113,12 @@ async function pullDeals(sb: SupabaseClient, acc: Account) {
       const sum = (all || []).reduce((a, d) => a + Number(d.net_profit), 0);
       initial = Math.round((balance - sum) * 100) / 100;
     }
-    const access = accessOf(trader.accessRights);
     acc.access_rights = access;
     const upd = { balance, initial_balance: initial, last_synced_at: new Date().toISOString(), sync_error: null };
     // Колонка access_rights появляется после миграции 010 — без неё синхронизация работает как раньше
     const { error: e1 } = await sb.from("ctrader_accounts").update({ ...upd, access_rights: access }).eq("id", acc.id);
     if (e1) await sb.from("ctrader_accounts").update(upd).eq("id", acc.id);
-    return { initial };
+    return { initial, changed: true };
   } finally { c.close(); }
 }
 
@@ -269,8 +290,10 @@ async function notify(sb: SupabaseClient, acc: Account, out: Awaited<ReturnType<
 
 /** Синхронизирует все активные счета (или счета одного трейдера). */
 /** budgetMs — лимит времени: счета идут от давно не обновлявшихся, остальные подождут следующего запуска. */
-export async function syncAll(sb: SupabaseClient, opts: { userId?: string; log?: (s: string) => void; budgetMs?: number; concurrency?: number } = {}) {
+/** light — режим крона: полная синхронизация раз в час (первый запуск часа), в остальное время только при изменениях. */
+export async function syncAll(sb: SupabaseClient, opts: { userId?: string; log?: (s: string) => void; budgetMs?: number; concurrency?: number; light?: boolean } = {}) {
   const log = opts.log || (() => {});
+  const full = !opts.light || new Date().getUTCMinutes() < 5;
   const t0 = Date.now();
   const rules = await loadRules(sb);
   let q = sb.from("ctrader_accounts").select("*").eq("active", true).order("last_synced_at", { ascending: true, nullsFirst: true });
@@ -281,8 +304,9 @@ export async function syncAll(sb: SupabaseClient, opts: { userId?: string; log?:
   const queue = [...((accounts || []) as Account[])];
   const one = async (acc: Account) => {
     try {
-      let initial = acc.initial_balance;
-      if (acc.status === "active" || initial == null) ({ initial } = await pullDeals(sb, acc));
+      let initial = acc.initial_balance, changed = full;
+      if (acc.status === "active" || initial == null) ({ initial, changed } = await pullDeals(sb, acc, full, rules.tz));
+      if (!changed) { ok++; log(`=   ${acc.ctid_trader_account_id} без изменений`); return; }
       const out = await recompute(sb, acc, rules, Number(initial));
       await notify(sb, acc, out);
       const L = out.res.days[out.res.days.length - 1];
