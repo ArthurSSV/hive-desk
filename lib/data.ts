@@ -170,6 +170,25 @@ export async function summaryBundle(sb: SupabaseClient, opts: { day?: string; pe
   const base = { period, rules, teams, scope, picker, pick: [...pick], groupStart: gs === "0000-01-01" ? null : gs };
   if (!allDays.length) return { ...base, empty: true as const, count: members.length };
   const first = allDays[0], last = allDays[allDays.length - 1];
+  // «Топ-5» для PDF: лучшие по % от своего стартового баланса, только с плюсом и не выбывшие
+  type TopRow = { name: string; team: string | null; pct: number; pnl: number; trades: number; day?: string };
+  type TopBox = { title: string; sub: string; rows: TopRow[]; byDay?: boolean };
+  const dm = (d: string) => `${d.slice(8, 10)}.${d.slice(5, 7)}`;
+  const span = (a: string, b: string) => (a === b ? dm(a) : `${dm(a)}–${dm(b)}`);
+  const mondayOf = (d: string) => { const x = new Date(d + "T12:00:00Z"); x.setUTCDate(x.getUTCDate() - ((x.getUTCDay() + 6) % 7)); return x.toISOString().slice(0, 10); };
+  const teamName = (id: number | null) => (id ? teams.find((t: any) => t.id === id)?.name ?? null : null);
+  const top5 = (s: string, e: string): TopRow[] => aggregate(alive(members, s), rowsByAcc, rules, period, s, e).traders
+    .filter(t => !t.failed && t.pnl != null && t.pnl > 0 && t.pnlPct != null)
+    .slice(0, 5).map(t => ({ name: t.name, team: teamName(t.team), pct: t.pnlPct!, pnl: t.pnl!, trades: t.trades }));
+  function topsFor(s: string, e: string, best: Record<string, { name: string; pct: number }>): TopBox[] {
+    const ws = allDays.find(d => d >= mondayOf(e)) || e;
+    if (period === "day") return [{ title: "Топ-5 дня", sub: dm(e), rows: top5(e, e) }, { title: "Топ-5 недели", sub: span(ws, e), rows: top5(ws, e) }];
+    const days = allDays.filter(d => d >= s && d <= e);
+    if (period === "week") return [{ title: "Топ-5 недели", sub: span(s, e), rows: top5(s, e) },
+      { title: "Лучший каждого дня", sub: "", byDay: true, rows: days.filter(d => best[d]).map(d => ({ name: best[d].name, team: null, pct: best[d].pct, pnl: 0, trades: 0, day: d })) }];
+    const name = period === "month" ? "Топ-5 месяца" : "Топ-5 периода";
+    return [{ title: name, sub: span(s, e), rows: top5(s, e) }, { title: "Топ-5 последней недели", sub: span(ws, e), rows: top5(ws, e) }];
+  }
   // Свой период: торговые дни между «с» и «по» включительно
   if (period === "range") {
     let [f, t] = [opts.from!, opts.to!]; if (f > t) [f, t] = [t, f];
@@ -177,7 +196,8 @@ export async function summaryBundle(sb: SupabaseClient, opts: { day?: string; pe
     if (!inR.length) return { ...base, empty: false as const, ...agg0(), noDays: true as const, key: `${f}_${t}`, start: f, end: t, label: periodLabel("range", period, f, t), anchor: t, prev: null, next: null, compare: [], first, last, from: f, to: t };
     const start = inR[0], end = inR[inR.length - 1];
     const agg = (ms: Member[]) => aggregate(alive(ms, start), rowsByAcc, rules, period, start, end);
-    return { ...base, empty: false as const, ...agg(members), accs: accsOf(alive(members, start)), allDays, key: `${f}_${t}`, start, end, label: periodLabel("range", period, f, t), anchor: end, prev: null, next: null, compare: compareOf(agg), first, last, from: f, to: t };
+    const mr = agg(members);
+    return { ...base, empty: false as const, ...mr, tops: topsFor(start, end, mr.bestByDay), accs: accsOf(alive(members, start)), allDays, key: `${f}_${t}`, start, end, label: periodLabel("range", period, f, t), anchor: end, prev: null, next: null, compare: compareOf(agg), first, last, from: f, to: t };
   }
   function accsOf(ms: Member[]) { return ms.map(m => ({ uid: m.p.id as string, name: m.p.name as string, acc: m.acc })); }
   function agg0() { return aggregate([], rowsByAcc, rules, period, first, first); }
@@ -192,6 +212,7 @@ export async function summaryBundle(sb: SupabaseClient, opts: { day?: string; pe
 
   const agg = (ms: Member[]) => aggregate(alive(ms, start), rowsByAcc, rules, period, start, end);
   const main = agg(members);
+  const tops = topsFor(start, end, main.bestByDay);
 
   const compare = compareOf(agg);
 
@@ -209,7 +230,7 @@ export async function summaryBundle(sb: SupabaseClient, opts: { day?: string; pe
     ...base, empty: false as const, ...main, accs: accsOf(alive(members, start)), allDays, first, last, from: start, to: end, noDays: false as const,
     key, start, end, label: periodLabel(key, period, start, end), anchor: end,
     prev: ki > 0 ? lastDayOf(keys[ki - 1]) : null, next: ki < keys.length - 1 ? lastDayOf(keys[ki + 1]) : null,
-    compare,
+    compare, tops,
   };
 }
 

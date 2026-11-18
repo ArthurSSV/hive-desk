@@ -34,7 +34,7 @@ export default async function Summary({ searchParams }: { searchParams: { day?: 
   if (!S.count) return (
     <>
       <div className="head"><div><h1>Сводка · {S.scope.name}</h1><p className="sub">В этой выборке нет трейдеров с подключённым счётом и начальным балансом.</p></div></div>
-      {picker}
+      <div className="noprint">{picker}</div>
     </>
   );
   const P = S.period, sum = S.sum, day = P === "day";
@@ -164,6 +164,21 @@ export default async function Summary({ searchParams }: { searchParams: { day?: 
         <GroupChart rows={chartRows} from={!hist || P === "all" ? null : S.start} to={!hist || P === "all" ? null : S.end} />
       </section>
 
+      {/* «Топ-5» — только в PDF, на первом листе под графиком */}
+      {(S as any).tops?.length > 0 && (
+        <section className="tops printblock" aria-hidden="true">
+          {((S as any).tops as { title: string; sub: string; rows: { name: string; team: string | null; pct: number; pnl: number; trades: number; day?: string }[]; byDay?: boolean }[]).map(b => (
+            <div className="topbox" key={b.title}>
+              <h3>🏆 {b.title}{b.sub && <small>{b.sub}</small>}</h3>
+              {!b.rows.length ? <p className="fine">Никто не закрыл период в плюсе.</p> : b.rows.map((r, i) => (
+                <div className="toprow" key={i}>
+                  <span className={`pl p${i + 1}`}>{b.byDay ? ["Вс", "Пн", "Вт", "Ср", "Чт", "Пт", "Сб"][new Date(r.day + "T12:00:00Z").getUTCDay()] : i + 1}</span>
+                  <span className="nm"><b>{r.name}</b><span>{b.byDay ? `${r.day!.slice(8, 10)}.${r.day!.slice(5, 7)}` : [r.team, `${r.trades} ${r.trades % 10 === 1 && r.trades % 100 !== 11 ? "сделка" : [2, 3, 4].includes(r.trades % 10) && ![12, 13, 14].includes(r.trades % 100) ? "сделки" : "сделок"}`].filter(Boolean).join(" · ")}</span></span>
+                  <span className="res pos mono">+{r.pct.toFixed(2)}%{!b.byDay && <span>+${Math.round(r.pnl).toLocaleString("en-US")}</span>}</span>
+                </div>))}
+            </div>))}
+        </section>)}
+
       <div className="grid2">
         <section className="panel pg" style={{ order: 2 }}>
           <div className="printmini"><span className="brand">Матрёшка — Челлендж</span><span>{isAll ? "Сводка группы" : `Сводка · ${S.scope.name}`} · {titleFor}</span></div>
@@ -283,7 +298,7 @@ export default async function Summary({ searchParams }: { searchParams: { day?: 
         </div>
       </div>
 
-      {picker}
+      <div className="noprint">{picker}</div>
       <CabinetTabs storageKey="sum-tab" initial="ov" tabs={[
         { id: "ov", label: "Обзор", node: <>{OV}</> },
         ...(GI ? [
