@@ -2,6 +2,7 @@ import Link from "next/link";
 import { dayKey, nextDayStart, isLateEntry, journalDays } from "@/lib/engine";
 import type { traderBundle } from "@/lib/data";
 import { saveJournal, syncMe } from "@/app/actions";
+import SyncButton from "./SyncButton";
 import { Gauge, PhaseTag, Pill, cls, fmtD, sg, usd } from "./ui";
 import DealsHistory from "./DealsHistory";
 import EquityCurve from "./EquityCurve";
@@ -146,7 +147,7 @@ export default function TraderView({ b, mode, journalDay, journalSaved, journalE
         <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
           <span className="fine">{acc.last_synced_at ? `Обновлено ${new Date(acc.last_synced_at).toLocaleString("ru-RU", { timeZone: vtz, hour: "2-digit", minute: "2-digit", day: "2-digit", month: "2-digit" })}` : "Ещё не синхронизирован"}</span>
           {self && <Link className="btn ghost" href="/connect" title="Подключение cTrader и выбор счёта"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ verticalAlign: "-2px", marginRight: 6 }} aria-hidden="true"><path d="M9 7H7a5 5 0 0 0 0 10h2M15 7h2a5 5 0 0 1 0 10h-2M8 12h8" /></svg>Подключение<i className="okdot" /></Link>}
-          {self && <form action={syncMe}><button className="btn ghost" type="submit">Обновить</button></form>}
+          {self && <SyncButton action={syncMe as any} />}
         </div>
       </div>
       {acc.sync_error && <div className="w l-yellow notice">Последняя синхронизация не удалась: {acc.sync_error}</div>}

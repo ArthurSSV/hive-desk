@@ -5,8 +5,9 @@ import { requireAdmin, requireUser, serviceClient, userClient } from "@/lib/supa
 import { createClient } from "@supabase/supabase-js";
 import { supabaseUrl, anonKey, appUrl } from "@/lib/env";
 import { dayKey, journalDays } from "@/lib/engine";
-import { syncAll, loadRules, recompute } from "@/lib/sync";
+import { loadRules, recompute } from "@/lib/sync";
 import { normalizeRules, GUIDE_BUCKET } from "@/lib/rules";
+import { dispatchSync, requestSync } from "@/lib/dispatch";
 
 export async function signOut() {
   await userClient().auth.signOut();
@@ -27,9 +28,11 @@ export async function saveJournal(fd: FormData) {
   await sb.from("journal").upsert({ user_id: profile.id, day, mood, plan, note, updated_at: new Date().toISOString() });
   // Флаги «нет отчёта» и «не по плану» зависят от дневника — пересчитываем сразу, не дожидаясь синхронизации
   try {
-    const svc = serviceClient();
-    const { data: accs } = await svc.from("ctrader_accounts").select("*").eq("user_id", profile.id).eq("active", true).eq("removed", false);
-    for (const a of accs || []) if (a.initial_balance != null) await recompute(svc, a, rules, Number(a.initial_balance));
+    if (!(await dispatchSync({ userId: profile.id, full: true }))) {
+      const svc = serviceClient();
+      const { data: accs } = await svc.from("ctrader_accounts").select("*").eq("user_id", profile.id).eq("active", true).eq("removed", false);
+      for (const a of accs || []) if (a.initial_balance != null) await recompute(svc, a, rules, Number(a.initial_balance));
+    }
   } catch { /* пересчитает ближайшая синхронизация */ }
   revalidatePath("/dashboard"); revalidatePath(`/admin/trader/${profile.id}`); revalidatePath("/admin");
   redirect(`/dashboard?jd=${day}&js=1#journal`);
@@ -49,25 +52,28 @@ export async function activateAccount(fd: FormData) {
   // Подтверждённые админом этап и баланс трейдер не меняет (это же проверяет база)
   const { error } = await sb.from("ctrader_accounts").update(acc.balance_locked ? { active: true } : { active: true, phase, initial_balance: initial }).eq("id", id).eq("user_id", profile.id);
   if (error) redirect("/connect?error=" + encodeURIComponent(error.message));
-  try { await syncAll(serviceClient(), { userId: profile.id }); } catch { /* воркер повторит */ }
+  await requestSync(serviceClient(), profile.id);
   redirect("/dashboard");
 }
 
-export async function syncMe() {
+/** Кнопка «Обновить»: синхронизация уходит в GitHub Actions, данные появятся примерно через минуту. */
+export async function syncMe(): Promise<"queued" | "done" | "wait"> {
   const { sb, profile } = await requireUser();
   // Не чаще раза в минуту, чтобы не упираться в лимиты cTrader
   const { data: accs } = await sb.from("ctrader_accounts").select("last_synced_at").eq("user_id", profile.id).eq("active", true);
   const last = Math.max(0, ...(accs || []).map(a => (a.last_synced_at ? Date.parse(a.last_synced_at) : 0)));
-  if (Date.now() - last < 60_000) { revalidatePath("/dashboard"); return; }
-  await syncAll(serviceClient(), { userId: profile.id });
+  if (Date.now() - last < 60_000) { revalidatePath("/dashboard"); return "wait"; }
+  const r = await requestSync(serviceClient(), profile.id);
   revalidatePath("/dashboard");
+  return r;
 }
 
-export async function syncUser(fd: FormData) {
+export async function syncUser(fd: FormData): Promise<"queued" | "done" | "wait"> {
   await requireAdmin();
   const id = String(fd.get("user"));
-  await syncAll(serviceClient(), { userId: id });
+  const r = await requestSync(serviceClient(), id);
   revalidatePath("/admin"); revalidatePath(`/admin/trader/${id}`);
+  return r;
 }
 
 export async function saveRules(fd: FormData) {
@@ -133,7 +139,7 @@ export async function confirmAccount(fd: FormData) {
   const id = Number(fd.get("id")), user = String(fd.get("user")), phase = Number(fd.get("phase")), initial = Number(fd.get("initial"));
   if (![1, 2, 3].includes(phase) || !(initial >= 100)) redirect(`/admin/trader/${user}?e=account`);
   await sb.from("ctrader_accounts").update({ phase, initial_balance: initial, balance_locked: fd.get("lock") !== "0" }).eq("id", id);
-  try { await syncAll(serviceClient(), { userId: user }); } catch { /* повторит крон */ }
+  await requestSync(serviceClient(), user);
   revalidatePath(`/admin/trader/${user}`); revalidatePath("/admin");
   redirect(`/admin/trader/${user}?ok=account`);
 }

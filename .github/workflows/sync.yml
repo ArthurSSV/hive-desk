@@ -10,7 +10,12 @@ on:
         description: "Полная синхронизация (иначе лёгкая: только при изменениях)"
         type: boolean
         default: false
-concurrency: { group: sync, cancel-in-progress: false }
+      user:
+        description: "Только один трейдер (id профиля) — кнопки «Обновить» в приложении"
+        type: string
+        default: ""
+# Общий крон — одна очередь; запуск по кнопке для трейдера — своя очередь, чтобы его не вытеснил крон
+concurrency: { group: "sync-${{ inputs.user || 'all' }}", cancel-in-progress: false }
 jobs:
   sync:
     runs-on: ubuntu-latest
@@ -23,6 +28,7 @@ jobs:
       - run: npm run sync
         env:
           SYNC_FULL: ${{ github.event_name == 'schedule' && '1' || inputs.full && '1' || '0' }}
+          SYNC_USER: ${{ inputs.user }}
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           CTRADER_CLIENT_ID: ${{ secrets.CTRADER_CLIENT_ID }}
