@@ -23,7 +23,7 @@ export default function TraderView({ b, mode, journalDay, journalSaved, journalE
     <div className="panel" style={{ display: "grid", gap: 12 }}>
       <h1>{self ? "Подключите счёт cTrader" : `${profile?.name || "Трейдер"}: счёт не подключён`}</h1>
       <p className="sub">{self ? "Без подключения мы не видим сделки и не можем считать прогресс." : "Трейдер зарегистрировался, но ещё не выбрал счёт для отслеживания."}</p>
-      {self && <Link className="btn" href="/connect">Подключить cTrader</Link>}
+      {self && <Link prefetch={false} className="btn" href="/connect">Подключить cTrader</Link>}
     </div>
   );
   const init = Number(acc.initial_balance || 0);
@@ -108,7 +108,7 @@ export default function TraderView({ b, mode, journalDay, journalSaved, journalE
               <td className="n">{d.trades || "—"}</td>
               <td className="n">{Number(d.max_lot) ? Number(d.max_lot).toFixed(2) : "—"}</td>
               <td className="n">{j?.mood ?? "—"}</td>
-              <td>{!j ? (self && jDays.includes(d.day) ? <Link href={`/dashboard?jd=${d.day}#journal`} className="fine">заполнить</Link> : <span className="fine">нет отчёта</span>) : <>{j.plan == null ? "—" : j.plan ? "да" : <span className="neg">нет</span>}{late(j) ? <span className="fine" style={{ color: "var(--amber)" }} title={lateNote(j)}> · позже</span> : null}</>}</td>
+              <td>{!j ? (self && jDays.includes(d.day) ? <Link prefetch={false} href={`/dashboard?jd=${d.day}#journal`} className="fine">заполнить</Link> : <span className="fine">нет отчёта</span>) : <>{j.plan == null ? "—" : j.plan ? "да" : <span className="neg">нет</span>}{late(j) ? <span className="fine" style={{ color: "var(--amber)" }} title={lateNote(j)}> · позже</span> : null}</>}</td>
               <td>{d.breach ? <Pill level="failed" /> : <Pill level={d.level} />}</td>
             </tr>); })}
             {!days.length && <tr><td colSpan={8} className="fine">Данных пока нет.</td></tr>}</tbody></table></div>
@@ -120,7 +120,7 @@ export default function TraderView({ b, mode, journalDay, journalSaved, journalE
       {self && (
             <section className="panel" id="journal"><div className="ph"><h2>Дневник за {fmtD(jDay)}</h2>{jDay !== today && <span className="fine">задним числом</span>}</div>
               <nav className="jdays" aria-label="День дневника">{jDays.map(d => { const has = notesById.has(d); return (
-                <Link key={d} href={`/dashboard?jd=${d}#journal`} scroll={false} aria-current={d === jDay ? "true" : undefined} title={has ? "Заполнен" : "Не заполнен"}>
+                <Link prefetch={false} key={d} href={`/dashboard?jd=${d}#journal`} scroll={false} aria-current={d === jDay ? "true" : undefined} title={has ? "Заполнен" : "Не заполнен"}>
                   <i className={has ? "on" : ""} />{d === today ? "Сегодня" : fmtD(d)}</Link>); })}</nav>
               {journalError && <div className="w l-red" style={{ marginBottom: 10 }}>Этот день закрыт: дневник можно заполнить за сегодня и три предыдущих торговых дня.</div>}
               <form className="journal" action={saveJournal} key={jDay}>
@@ -146,7 +146,7 @@ export default function TraderView({ b, mode, journalDay, journalSaved, journalE
           <p className="sub">Счёт #{acc.trader_login || acc.ctid_trader_account_id} · {acc.broker_name || "cTrader"} · баланс {usd(acc.balance)} · старт фазы {usd(acc.initial_balance)}{access !== "full" ? <> · <span style={{ color: failed ? "var(--red)" : "var(--amber)" }}>cTrader: {ACCESS_LABEL[access]}</span></> : !self && acc.access_rights ? " · cTrader: торговля разрешена" : null}{self ? " · эти данные видите только вы и админ" : ` · ${profile?.email}`}</p></div>
         <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
           <span className="fine">{acc.last_synced_at ? `Обновлено ${new Date(acc.last_synced_at).toLocaleString("ru-RU", { timeZone: vtz, hour: "2-digit", minute: "2-digit", day: "2-digit", month: "2-digit" })}` : "Ещё не синхронизирован"}</span>
-          {self && <Link className="btn ghost" href="/connect" title="Подключение cTrader и выбор счёта"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ verticalAlign: "-2px", marginRight: 6 }} aria-hidden="true"><path d="M9 7H7a5 5 0 0 0 0 10h2M15 7h2a5 5 0 0 1 0 10h-2M8 12h8" /></svg>Подключение<i className="okdot" /></Link>}
+          {self && <Link prefetch={false} className="btn ghost" href="/connect" title="Подключение cTrader и выбор счёта"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ verticalAlign: "-2px", marginRight: 6 }} aria-hidden="true"><path d="M9 7H7a5 5 0 0 0 0 10h2M15 7h2a5 5 0 0 1 0 10h-2M8 12h8" /></svg>Подключение<i className="okdot" /></Link>}
           {self && <SyncButton action={syncMe as any} />}
         </div>
       </div>

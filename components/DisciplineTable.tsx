@@ -24,7 +24,7 @@ export default function DisciplineTable({ rows }: { rows: DRow[] }) {
           <button type="button" className="thbtn" onClick={() => { if (k === c) setDir(-dir); else { setK(c); setDir(c === "name" ? 1 : -1); } }}>{l}{k === c ? (dir < 0 ? " ↓" : " ↑") : ""}</button></th>))}
     </tr></thead><tbody>{sorted.map(r => (
       <tr key={r.uid} style={{ cursor: "default" }}>
-        <td className="who"><Link href={`/admin/trader/${r.uid}`} style={{ color: "inherit", textDecoration: "none" }}><b>{r.name}</b></Link><span>Фаза {r.phase === 3 ? "Funded" : r.phase}</span></td>
+        <td className="who"><Link prefetch={false} href={`/admin/trader/${r.uid}`} style={{ color: "inherit", textDecoration: "none" }}><b>{r.name}</b></Link><span>Фаза {r.phase === 3 ? "Funded" : r.phase}</span></td>
         <td className="n">{r.score == null ? dash : <span className="score">{r.score}<i><b style={{ width: `${r.score}%`, background: `var(--${tone(r.score)})` }} /></i></span>}</td>
         <td className="n">{r.n || dash}</td>
         <td className="n">{r.risk == null ? dash : `${r.risk.toFixed(2)}%`}</td>

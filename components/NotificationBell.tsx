@@ -1,6 +1,7 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { createBrowserClient } from "@supabase/ssr";
 
 type N = { id: number; kind: string; text: string; link: string | null; created_at: string; read_at: string | null };
 const ICON: Record<string, string> = { signup: "👤", connect: "🔗", remove: "🗑", passed: "🏆", failed: "⛔" };
@@ -12,17 +13,37 @@ const ago = (iso: string) => {
   return new Date(iso).toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit" });
 };
 
-/** Колокольчик админа: список событий и всплывающие уведомления о новых. */
-export default function NotificationBell() {
+/** Колокольчик админа: список событий и всплывающие уведомления о новых.
+ *  Читает базу напрямую из браузера (права — RLS), без запросов к Vercel; опрос раз в минуту и только на видимой вкладке. */
+export default function NotificationBell({ url, anon }: { url: string; anon: string }) {
   const router = useRouter();
+  const sb = useRef<ReturnType<typeof createBrowserClient> | null>(null);
+  const db = () => (sb.current ||= createBrowserClient(url, anon));
+  // Запасной путь — прежний API, если прямой запрос не прошёл
+  const api = (method: "POST" | "DELETE", body: object) => fetch("/api/notifications", { method, body: JSON.stringify(body) }).catch(() => {});
+  const mark = async (ids: number[] | "all") => {
+    let q = db().from("notifications").update({ read_at: new Date().toISOString() }).is("read_at", null);
+    if (ids !== "all") q = q.in("id", ids);
+    const { error } = await q; if (error) api("POST", ids === "all" ? { all: true } : { ids });
+  };
+  const drop = async (what: number[] | "read") => {
+    const { error } = what === "read" ? await db().from("notifications").delete().not("read_at", "is", null) : await db().from("notifications").delete().in("id", what);
+    if (error) api("DELETE", what === "read" ? { read: true } : { ids: what });
+  };
   const [items, setItems] = useState<N[]>([]), [unread, setUnread] = useState(0);
   const [open, setOpen] = useState(false), [toasts, setToasts] = useState<N[]>([]);
   const seen = useRef<number | null>(null);
 
   const load = useCallback(async () => {
     try {
-      const r = await fetch("/api/notifications", { cache: "no-store" }); if (!r.ok) return;
-      const j: { items: N[]; unread: number } = await r.json();
+      const dayAgo = new Date(Date.now() - 24 * 3600_000).toISOString();
+      const [a, b] = await Promise.all([
+        db().from("notifications").select("id,kind,text,link,created_at,read_at").or(`read_at.is.null,read_at.gt.${dayAgo}`).order("id", { ascending: false }).limit(30),
+        db().from("notifications").select("id", { count: "exact", head: true }).is("read_at", null),
+      ]);
+      let j: { items: N[]; unread: number };
+      if (a.error) { const r = await fetch("/api/notifications", { cache: "no-store" }); if (!r.ok) return; j = await r.json(); }
+      else j = { items: (a.data || []) as N[], unread: b.count || 0 };
       setItems(j.items); setUnread(j.unread);
       const top = j.items[0]?.id ?? 0;
       let last = seen.current;
@@ -39,7 +60,7 @@ export default function NotificationBell() {
 
   useEffect(() => {
     load();
-    const t = setInterval(load, 30000);
+    const t = setInterval(() => { if (document.visibilityState === "visible") load(); }, 60000);
     const v = () => document.visibilityState === "visible" && load();
     document.addEventListener("visibilitychange", v);
     return () => { clearInterval(t); document.removeEventListener("visibilitychange", v); };
@@ -48,20 +69,20 @@ export default function NotificationBell() {
 
   async function go(n: N) {
     setOpen(false); setToasts(t => t.filter(x => x.id !== n.id));
-    if (!n.read_at) { setUnread(u => Math.max(0, u - 1)); setItems(l => l.map(x => (x.id === n.id ? { ...x, read_at: new Date().toISOString() } : x))); fetch("/api/notifications", { method: "POST", body: JSON.stringify({ ids: [n.id] }) }).catch(() => {}); }
+    if (!n.read_at) { setUnread(u => Math.max(0, u - 1)); setItems(l => l.map(x => (x.id === n.id ? { ...x, read_at: new Date().toISOString() } : x))); mark([n.id]); }
     if (n.link) router.push(n.link);
   }
   async function dismiss(n: N) {
     setItems(l => l.filter(x => x.id !== n.id)); if (!n.read_at) setUnread(u => Math.max(0, u - 1));
-    fetch("/api/notifications", { method: "DELETE", body: JSON.stringify({ ids: [n.id] }) }).catch(() => {});
+    drop([n.id]);
   }
   async function clearRead() {
     setItems(l => l.filter(x => !x.read_at));
-    await fetch("/api/notifications", { method: "DELETE", body: JSON.stringify({ read: true }) }).catch(() => {});
+    await drop("read");
   }
   async function readAll() {
     setUnread(0); setItems(l => l.map(x => ({ ...x, read_at: x.read_at || new Date().toISOString() })));
-    await fetch("/api/notifications", { method: "POST", body: JSON.stringify({ all: true }) }).catch(() => {});
+    await mark("all");
   }
 
   return (

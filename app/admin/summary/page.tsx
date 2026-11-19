@@ -155,7 +155,7 @@ export default async function Summary({ searchParams }: { searchParams: { day?: 
             <thead><tr><th>Команда</th><th>Куратор</th><th className="n">Трейдеров</th><th className="n">Капитал</th><th className="n">{day ? "За день" : "За период"}</th><th className="n">%</th><th className="n">Итог команды</th><th className="n">+ / −</th><th>Зоны</th></tr></thead>
             <tbody>{S.compare.map((c, i) => (
               <tr key={c.key} style={{ cursor: "default" }}>
-                <td><Link href={`/admin/summary?period=${P}&day=${S.anchor}&scope=${c.key}`} style={{ color: "var(--fg)", fontWeight: 800, textDecoration: "none" }}>{i === 0 && c.pct > 0 ? "🏆 " : ""}{c.name}</Link></td>
+                <td><Link prefetch={false} href={`/admin/summary?period=${P}&day=${S.anchor}&scope=${c.key}`} style={{ color: "var(--fg)", fontWeight: 800, textDecoration: "none" }}>{i === 0 && c.pct > 0 ? "🏆 " : ""}{c.name}</Link></td>
                 <td><span className="fine">{c.curator || "—"}</span></td>
                 <td className="n">{c.count}</td>
                 <td className="n">{money(c.capital)}</td>
@@ -172,7 +172,7 @@ export default async function Summary({ searchParams }: { searchParams: { day?: 
         <div className="ph"><h2>Как мы двигаемся вместе</h2>
           <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
             <span className="fine">{hist ? `линия — накопленный результат с начала, % от общего капитала · столбцы — итог дня, $${P !== "all" ? " · выбранный период подсвечен" : ""}` : `линия — результат ${FOR[P]} с нуля, % от общего капитала · столбцы — итог дня, $`}</span>
-            {canTrim && <Link className="linkbtn noprint" href={histHref} scroll={false}>{hist ? "Только период" : "Показать с начала"}</Link>}
+            {canTrim && <Link prefetch={false} className="linkbtn noprint" href={histHref} scroll={false}>{hist ? "Только период" : "Показать с начала"}</Link>}
           </div></div>
         <GroupChart rows={chartRows} from={!hist || P === "all" ? null : S.start} to={!hist || P === "all" ? null : S.end} />
       </section>
@@ -200,7 +200,7 @@ export default async function Summary({ searchParams }: { searchParams: { day?: 
             <thead><tr><th>Дата</th><th className="n">Итог дня</th><th className="n">Группа</th><th className="n">+ / −</th><th className="n printonly">Сделок</th><th className="printonly">Лучший</th></tr></thead>
             <tbody>{S.table.map(r => (
               <tr key={r.day} className={(S as any).failedByDay?.[r.day] ? "dead" : undefined} style={{ cursor: "default", background: day && r.day === S.end ? "rgba(232,181,74,.06)" : undefined }}>
-                <td className="mono"><Link href={href("day", r.day)} style={{ color: "inherit", textDecoration: "none" }}>{fmtD(r.day)}</Link>{(S as any).failedByDay?.[r.day] && <span className="fine neg"> ✕ {(S as any).failedByDay[r.day].join(", ")}</span>}</td>
+                <td className="mono"><Link prefetch={false} href={href("day", r.day)} style={{ color: "inherit", textDecoration: "none" }}>{fmtD(r.day)}</Link>{(S as any).failedByDay?.[r.day] && <span className="fine neg"> ✕ {(S as any).failedByDay[r.day].join(", ")}</span>}</td>
                 <td className={`n ${cls(r.pnl)}`}>{money(r.pnl, true)}</td>
                 <td className={`n ${cls(r.cumPct)}`}>{sg(r.cumPct)}%</td>
                 <td className="n"><span className="pos">{r.plus}</span> / <span className="neg">{r.minus}</span></td>
@@ -216,7 +216,7 @@ export default async function Summary({ searchParams }: { searchParams: { day?: 
             <thead><tr><th>Трейдер</th><th>Этап</th><th className="n">Итог</th><th className="n">%</th>{!day && <th className="n">Дни + / −</th>}<th className="n">Итог фазы</th><th className="n">Сделки</th><th>Зона</th></tr></thead>
             <tbody>{S.traders.map(t => (
               <tr key={t.id} className={t.failed ? "dead" : undefined} style={{ cursor: "default" }}>
-                <td><Link href={`/admin/trader/${t.id}`} style={{ color: "var(--fg)", fontWeight: 700, textDecoration: "none" }}>{t.name}</Link></td>
+                <td><Link prefetch={false} href={`/admin/trader/${t.id}`} style={{ color: "var(--fg)", fontWeight: 700, textDecoration: "none" }}>{t.name}</Link></td>
                 <td><span className="fine">{t.failed ? "Дохлик" : PHASE_LABEL[t.phase]}</span></td>
                 <td className={`n ${cls(t.pnl ?? 0)}`}>{t.pnl == null ? "—" : money(t.pnl, true)}</td>
                 <td className={`n ${cls(t.pnlPct ?? 0)}`}>{t.pnlPct == null ? "—" : `${sg(t.pnlPct)}%`}</td>
@@ -248,7 +248,7 @@ export default async function Summary({ searchParams }: { searchParams: { day?: 
     <section className="panel"><div className="ph"><h2>Кому нужна помощь</h2><span className="fine">текущее состояние · отсортировано по срочности · нажмите, чтобы открыть карточку</span></div>
       <div className="note" style={{ marginBottom: 12 }}><span>Срочно: <b className="neg">{urgentN}</b></span><span>Внимание: <b style={{ color: "var(--amber)" }}>{radar.length - urgentN}</b></span><span>Всё спокойно: <b className="pos">{live.length - radar.length}</b></span></div>
       {radar.length ? <div className="rad">{radar.map(x => (
-        <Link key={x.uid} href={`/admin/trader/${x.uid}`} className={x.ins.urgent ? "u" : "w"}>
+        <Link prefetch={false} key={x.uid} href={`/admin/trader/${x.uid}`} className={x.ins.urgent ? "u" : "w"}>
           <span className="lvl">{x.ins.urgent ? "срочно" : "внимание"}</span>
           <div><b>{x.name}</b> <span className="fine">{x.phase === 3 ? "Funded" : `Фаза ${x.phase}`}{totalOf.get(x.uid) != null ? <> · результат <span className={cls(totalOf.get(x.uid)!)}>{sg(totalOf.get(x.uid)!)}%</span></> : null}</span>
             <div className="why">{x.ins.why.map(w => <span key={w.t} className={w.lv}>{w.t}</span>)}</div></div>
@@ -295,11 +295,11 @@ export default async function Summary({ searchParams }: { searchParams: { day?: 
           <div className="titlerow"><h1>{isAll ? "Сводка группы" : `Сводка · ${S.scope.name}`}</h1><span className="count">{S.label.short}</span></div>
           <p className="sub" style={{ textTransform: day ? "capitalize" : undefined }}>{S.label.long}{!day ? ` · торговых дней ${sum.tradingDays}` : ""}{S.groupStart ? <span className="fine"> · челлендж группы с {S.groupStart.slice(8, 10)}.{S.groupStart.slice(5, 7)}</span> : null}</p>
           <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap", alignItems: "center" }}>
-            <nav className="seg2" aria-label="Период" style={{ marginRight: 4 }}>{TABS.map(([p, l]) => <Link key={p} href={href(p)} aria-current={p === P ? "page" : undefined}>{l}</Link>)}</nav>
+            <nav className="seg2" aria-label="Период" style={{ marginRight: 4 }}>{TABS.map(([p, l]) => <Link prefetch={false} key={p} href={href(p)} aria-current={p === P ? "page" : undefined}>{l}</Link>)}</nav>
             <RangePicker from={S.from} to={S.to} min={S.first} max={S.last} active={P === "range"} base={rangeQ} />
             {P !== "all" && P !== "range" && <>
-              {S.prev ? <Link className="btn ghost" href={href(P, S.prev)} aria-label="Предыдущий период">‹</Link> : <span className="btn ghost" aria-disabled="true" style={{ opacity: .35 }}>‹</span>}
-              {S.next ? <Link className="btn ghost" href={href(P, S.next)} aria-label="Следующий период">›</Link> : <span className="btn ghost" aria-disabled="true" style={{ opacity: .35 }}>›</span>}
+              {S.prev ? <Link prefetch={false} className="btn ghost" href={href(P, S.prev)} aria-label="Предыдущий период">‹</Link> : <span className="btn ghost" aria-disabled="true" style={{ opacity: .35 }}>‹</span>}
+              {S.next ? <Link prefetch={false} className="btn ghost" href={href(P, S.next)} aria-label="Следующий период">›</Link> : <span className="btn ghost" aria-disabled="true" style={{ opacity: .35 }}>›</span>}
             </>}
           </div>
         </div>

@@ -41,12 +41,12 @@ export default function AuthForm({ mode, notice, code }: { mode: "login" | "regi
         {reg && <label className="field" htmlFor="name">Имя и первая буква фамилии<input id="name" name="name" placeholder="Например, Мирослав Д." autoComplete="name" /></label>}
         <label className="field" htmlFor="email">Email<input id="email" name="email" type="email" autoComplete="email" required /></label>
         <label className="field" htmlFor="password">Пароль<input id="password" name="password" type="password" autoComplete={reg ? "new-password" : "current-password"} required /></label>
-        {!reg && <Link href="/forgot" className="fine" style={{ justifySelf: "end", marginTop: -6 }}>Забыли пароль?</Link>}
+        {!reg && <Link prefetch={false} href="/forgot" className="fine" style={{ justifySelf: "end", marginTop: -6 }}>Забыли пароль?</Link>}
         <div className="err" role="alert">{err}</div>
         {info && <div className="notice">{info}</div>}
         <button className="btn" type="submit" disabled={busy}>{busy ? "Подождите…" : reg ? "Создать аккаунт" : "Войти"}</button>
       </form>
-      <p className="fine" style={{ textAlign: "center" }}>{reg ? <>Уже есть аккаунт? <Link href="/login">Войти</Link></> : <>Впервые здесь? <Link href="/register">Зарегистрироваться</Link></>}</p>
+      <p className="fine" style={{ textAlign: "center" }}>{reg ? <>Уже есть аккаунт? <Link prefetch={false} href="/login">Войти</Link></> : <>Впервые здесь? <Link prefetch={false} href="/register">Зарегистрироваться</Link></>}</p>
     </div>
   );
 }

@@ -28,7 +28,7 @@ export default function Forgot() {
           <button className="btn" type="submit" disabled={busy}>{busy ? "Отправляем…" : "Отправить ссылку"}</button>
         </form>
       )}
-      <p className="fine" style={{ textAlign: "center" }}><Link href="/login">← Вернуться ко входу</Link></p>
+      <p className="fine" style={{ textAlign: "center" }}><Link prefetch={false} href="/login">← Вернуться ко входу</Link></p>
     </div>
   );
 }

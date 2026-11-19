@@ -19,7 +19,7 @@ export default async function TraderCard({ params, searchParams }: { params: { i
   if (!b.profile) notFound();
   return (
     <>
-      <div className="head"><Link href="/admin" className="fine">← Вся группа</Link>
+      <div className="head"><Link prefetch={false} href="/admin" className="fine">← Вся группа</Link>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}><SyncButton action={syncUser} user={params.id} label="Синхронизировать сейчас" />
         <form action={sendPasswordReset}><input type="hidden" name="user" value={params.id} /><button className="btn ghost" type="submit" title={`Письмо уйдёт на ${b.profile.email}`}>Отправить ссылку для сброса пароля</button></form></div></div>
       {searchParams.ok === "reset" && <div className="w l-green notice">Письмо со ссылкой для нового пароля отправлено на {b.profile.email}. Ссылка действует 1 час.</div>}

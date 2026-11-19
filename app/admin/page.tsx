@@ -55,9 +55,9 @@ export default async function Admin() {
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
         <CopyReport text={regLink} label="Скопировать ссылку для регистрации" ghost />
         {!invite && <span className="fine" style={{ color: "var(--amber)" }}>Код приглашения не задан — зарегистрироваться может любой. Задайте его в «Правилах».</span>}
-        {(reqs || []).map(r => <Link key={r.ctid_trader_account_id} href={`/admin/trader/${r.user_id}`} className="fine" style={{ color: "var(--red)" }}>⚠ {nameOf.get(r.user_id) || "Трейдер"} просит удалить счёт #{r.trader_login || r.ctid_trader_account_id}</Link>)}
+        {(reqs || []).map(r => <Link prefetch={false} key={r.ctid_trader_account_id} href={`/admin/trader/${r.user_id}`} className="fine" style={{ color: "var(--red)" }}>⚠ {nameOf.get(r.user_id) || "Трейдер"} просит удалить счёт #{r.trader_login || r.ctid_trader_account_id}</Link>)}
         {T.some(t => t.acc && !t.acc.balance_locked) && <span className="fine" style={{ color: "var(--amber)" }}>⚠ Ждут подтверждения баланса: {T.filter(t => t.acc && !t.acc.balance_locked).map(t => t.p.name).join(", ")}</span>}
-        {archive.length > 0 && <span className="fine">В архиве: {archive.map((x, k) => <span key={x.p.id}>{k ? ", " : ""}<Link href={`/admin/trader/${x.p.id}`}>{x.p.name}</Link></span>)}</span>}
+        {archive.length > 0 && <span className="fine">В архиве: {archive.map((x, k) => <span key={x.p.id}>{k ? ", " : ""}<Link prefetch={false} href={`/admin/trader/${x.p.id}`}>{x.p.name}</Link></span>)}</span>}
       </div>
       <section className="strip" aria-label="Сводка">
         <div><div className="k">Фаза 1</div><div className="v">{p1}</div></div>
@@ -75,7 +75,7 @@ export default async function Admin() {
         </section>
         <section className="panel"><div className="ph"><h2>Требуют внимания</h2><span className="fine">{alerts.length}</span></div>
           <div className="alerts">{alerts.map(t => (
-            <Link key={t.p.id} href={`/admin/trader/${t.p.id}`} className={`alert ${t.level === "red" || (t.level !== "yellow" && urgent(t)) ? "red" : "yellow"}`} style={{ textDecoration: "none" }}>
+            <Link prefetch={false} key={t.p.id} href={`/admin/trader/${t.p.id}`} className={`alert ${t.level === "red" || (t.level !== "yellow" && urgent(t)) ? "red" : "yellow"}`} style={{ textDecoration: "none" }}>
               <div><b>{t.p.name}</b> <PhaseTag phase={t.acc!.phase} status={t.acc!.status} /><div className="why">{LEVEL_LABEL[t.level]} · результат {t.m.total > 0 ? "+" : ""}{t.m.total.toFixed(2)}%{t.flags.length ? " · " + t.flags.map(f => f.t).join(" · ") : ""}</div></div>
             </Link>))}
             {!alerts.length && <p className="fine">Сегодня всё спокойно.</p>}</div>
