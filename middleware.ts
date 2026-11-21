@@ -1,4 +1,5 @@
 import { createServerClient } from "@supabase/ssr";
+import { siteOrigin } from "@/lib/env";
 import { NextResponse, type NextRequest } from "next/server";
 import { supabaseUrl, anonKey } from "@/lib/env";
 
@@ -19,7 +20,8 @@ export async function middleware(req: NextRequest) {
   const p = req.nextUrl.pathname;
   const isPublic = p === "/" || p.startsWith("/login") || p.startsWith("/register") || p.startsWith("/forgot") || p.startsWith("/auth");
   if (!user && !isPublic) {
-    const u = req.nextUrl.clone(); u.pathname = "/login"; return NextResponse.redirect(u);
+    // Абсолютный адрес из заголовков прокси: на Render req.nextUrl указывает на localhost
+    return NextResponse.redirect(new URL("/login", siteOrigin(req)));
   }
   return res;
 }

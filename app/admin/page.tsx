@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { appUrl } from "@/lib/env";
 import { headers } from "next/headers";
 import { requireAdmin } from "@/lib/supabase";
 import { groupBundle } from "@/lib/data";
@@ -14,7 +15,7 @@ const plural = (n: number) => { const a = n % 10, b = n % 100; return `${n} ${a 
 
 export default async function Admin() {
   const { sb } = await requireAdmin();
-  const site = `https://${headers().get("host")}`;
+  const site = appUrl() || `https://${headers().get("host")}`;
   const { data: st } = await sb.from("settings").select("invite_code").eq("id", 1).single();
   const invite = (st as any)?.invite_code as string | null;
   const { data: reqs } = await sb.from("ctrader_accounts").select("user_id,trader_login,ctid_trader_account_id").not("delete_requested_at", "is", null).eq("removed", false);

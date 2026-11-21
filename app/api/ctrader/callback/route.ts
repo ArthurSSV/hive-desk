@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { siteOrigin } from "@/lib/env";
 import { cookies } from "next/headers";
 import { serviceClient, userClient } from "@/lib/supabase";
 import { CTraderConnection, exchangeCode } from "@/lib/ctrader";
@@ -6,7 +7,7 @@ import { CTraderConnection, exchangeCode } from "@/lib/ctrader";
 export const maxDuration = 60;
 
 export async function GET(req: NextRequest) {
-  const base = new URL(req.url).origin;
+  const base = siteOrigin(req);
   const fail = (msg: string) => NextResponse.redirect(`${base}/connect?error=${encodeURIComponent(msg)}`);
   const { data: { user } } = await userClient().auth.getUser();
   if (!user) return NextResponse.redirect(`${base}/login`);

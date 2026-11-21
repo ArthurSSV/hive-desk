@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { siteOrigin } from "@/lib/env";
 import { serviceClient, userClient } from "@/lib/supabase";
 import { normalizeRules, GUIDE_BUCKET } from "@/lib/rules";
 
@@ -6,7 +7,7 @@ export const dynamic = "force-dynamic";
 
 /** Материал для трейдеров: только для вошедших, по короткой подписанной ссылке на закрытое хранилище. */
 export async function GET(req: Request) {
-  const base = new URL(req.url).origin;
+  const base = siteOrigin(req);
   const { data: { user } } = await userClient().auth.getUser();
   if (!user) return NextResponse.redirect(`${base}/login`);
   const svc = serviceClient();

@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { siteOrigin } from "@/lib/env";
 import type { EmailOtpType } from "@supabase/supabase-js";
 import { userClient } from "@/lib/supabase";
 
@@ -13,6 +14,6 @@ export async function GET(req: NextRequest) {
   let ok = false;
   if (token_hash && type) ok = !(await sb.auth.verifyOtp({ type, token_hash })).error;
   else if (code) ok = !(await sb.auth.exchangeCodeForSession(code)).error;
-  if (ok) return NextResponse.redirect(new URL(type === "recovery" ? "/reset" : next, req.url));
-  return NextResponse.redirect(new URL(type === "recovery" || next === "/reset" ? "/login?e=link" : "/login?confirmed=1", req.url));
+  if (ok) return NextResponse.redirect(new URL(type === "recovery" ? "/reset" : next, siteOrigin(req)));
+  return NextResponse.redirect(new URL(type === "recovery" || next === "/reset" ? "/login?e=link" : "/login?confirmed=1", siteOrigin(req)));
 }
