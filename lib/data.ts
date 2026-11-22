@@ -263,7 +263,8 @@ function aggregate(members: Member[], rowsByAcc: Map<number, any[]>, rules: Retu
     // День вылета: нарушение лимита в наших расчётах, иначе день статуса (сигнал cTrader или отметка админа)
     const failDay = acc.status === "failed" ? (all.find(r => r.breach)?.day as string | undefined) ?? ((acc as any).status_day ? String((acc as any).status_day) : null) : null;
     return {
-      id: p.id as string, name: p.name as string, team: p.team_id as number | null, phase: acc.phase, failed: failedBy, failDay, size,
+      // id — профиль (для ссылок), key — счёт: у трейдера может быть текущий счёт и счёт в архиве
+      id: p.id as string, key: `${p.id}-${acc.id}`, name: p.name as string, team: p.team_id as number | null, phase: acc.phase, failed: failedBy, failDay, size,
       pnl: own.length ? pnl : null, pnlPct: own.length ? (pnl / size) * 100 : null,
       total: endRow ? Number(endRow.total_pct) : null, trades: own.reduce((a, r) => a + r.trades, 0),
       plusDays: own.filter(r => Number(r.pnl) > 0).length, minusDays: own.filter(r => Number(r.pnl) < 0).length,
@@ -336,7 +337,7 @@ export async function groupInsights(sb: SupabaseClient, accs: { uid: string; nam
     const reason = !failed ? null : (acc as any).manual_failed ? "manual" : breach === "daily" ? "daily" : breach === "max" ? "max" : "signal";
     const fDay = failed ? String((acc as any).status_day || "") : "";
     const life = failed && fDay ? allDays.filter(d => d >= String(acc.created_at).slice(0, 10) && d <= fDay).length : null;
-    return { uid, name, phase: acc.phase, failed, reason, life, ins };
+    return { uid, key: `${uid}-${acc.id}`, accId: acc.id as number, name, phase: acc.phase, failed, reason, life, ins };
   });
   // Сделки периода для общей аналитики: каждая помечена трейдером и размером его счёта
   const initOf = new Map(accs.map(a => [a.acc.id, Number(a.acc.initial_balance)])), whoOf = new Map(accs.map(a => [a.acc.id, a.uid]));

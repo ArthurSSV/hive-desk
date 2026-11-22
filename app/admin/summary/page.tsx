@@ -215,7 +215,7 @@ export default async function Summary({ searchParams }: { searchParams: { day?: 
           <div className="tablewrap"><table className="daytbl">
             <thead><tr><th>Трейдер</th><th>Этап</th><th className="n">Итог</th><th className="n">%</th>{!day && <th className="n">Дни + / −</th>}<th className="n">Итог фазы</th><th className="n">Сделки</th><th>Зона</th></tr></thead>
             <tbody>{S.traders.map(t => (
-              <tr key={t.id} className={t.failed ? "dead" : undefined} style={{ cursor: "default" }}>
+              <tr key={t.key} className={t.failed ? "dead" : undefined} style={{ cursor: "default" }}>
                 <td><Link prefetch={false} href={`/admin/trader/${t.id}`} style={{ color: "var(--fg)", fontWeight: 700, textDecoration: "none" }}>{t.name}</Link></td>
                 <td><span className="fine">{t.failed ? "Дохлик" : PHASE_LABEL[t.phase]}</span></td>
                 <td className={`n ${cls(t.pnl ?? 0)}`}>{t.pnl == null ? "—" : money(t.pnl, true)}</td>
@@ -234,10 +234,10 @@ export default async function Summary({ searchParams }: { searchParams: { day?: 
   const live = (GI?.people || []).filter(x => !x.failed);
   const radar = live.filter(x => x.ins.why.length).sort((a, b) => Number(b.ins.urgent) - Number(a.ins.urgent) || b.ins.why.filter(w => w.lv === "r").length - a.ins.why.filter(w => w.lv === "r").length || b.ins.why.length - a.ins.why.length);
   const urgentN = radar.filter(x => x.ins.urgent).length;
-  const totalOf = new Map(S.traders.map(t => [t.id, t.total]));
+  const totalOf = new Map(S.traders.map(t => [t.key, t.total]));
   const avg = (xs: (number | null)[]) => { const v = xs.filter((x): x is number => x != null); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null; };
   const kp = (k: string, v: string, c: string, sub: string) => <div key={k}><div className="k">{k}</div><div className={`v ${c}`}>{v}</div><div className="s">{sub}</div></div>;
-  const drows: DRow[] = live.map(x => ({ uid: x.uid, name: x.name, phase: x.phase, n: x.ins.n, score: x.ins.score, risk: x.ins.risk, cv: x.ins.cv, slPct: x.ins.slPct, avgR: x.ins.avgR, lotUpPct: x.ins.lotUpPct, planPct: x.ins.planPct, journalPct: x.ins.journalPct, res: totalOf.get(x.uid) ?? null }));
+  const drows: DRow[] = live.map(x => ({ key: x.key, uid: x.uid, name: x.name, phase: x.phase, n: x.ins.n, score: x.ins.score, risk: x.ins.risk, cv: x.ins.cv, slPct: x.ins.slPct, avgR: x.ins.avgR, lotUpPct: x.ins.lotUpPct, planPct: x.ins.planPct, journalPct: x.ins.journalPct, res: totalOf.get(x.key) ?? null }));
   const all = GI?.people || [], started = all.length, failedP = all.filter(x => x.failed);
   const reasons: [string, string, number][] = [["max", "Общая просадка", 0], ["daily", "Дневной лимит", 0], ["signal", "Проп отключил торговлю у границы лимита", 0], ["manual", "Отмечено вручную", 0]];
   for (const f of failedP) { const r = reasons.find(x => x[0] === f.reason); if (r) r[2]++; }
@@ -248,9 +248,9 @@ export default async function Summary({ searchParams }: { searchParams: { day?: 
     <section className="panel"><div className="ph"><h2>Кому нужна помощь</h2><span className="fine">текущее состояние · отсортировано по срочности · нажмите, чтобы открыть карточку</span></div>
       <div className="note" style={{ marginBottom: 12 }}><span>Срочно: <b className="neg">{urgentN}</b></span><span>Внимание: <b style={{ color: "var(--amber)" }}>{radar.length - urgentN}</b></span><span>Всё спокойно: <b className="pos">{live.length - radar.length}</b></span></div>
       {radar.length ? <div className="rad">{radar.map(x => (
-        <Link prefetch={false} key={x.uid} href={`/admin/trader/${x.uid}`} className={x.ins.urgent ? "u" : "w"}>
+        <Link prefetch={false} key={x.key} href={`/admin/trader/${x.uid}`} className={x.ins.urgent ? "u" : "w"}>
           <span className="lvl">{x.ins.urgent ? "срочно" : "внимание"}</span>
-          <div><b>{x.name}</b> <span className="fine">{x.phase === 3 ? "Funded" : `Фаза ${x.phase}`}{totalOf.get(x.uid) != null ? <> · результат <span className={cls(totalOf.get(x.uid)!)}>{sg(totalOf.get(x.uid)!)}%</span></> : null}</span>
+          <div><b>{x.name}</b> <span className="fine">{x.phase === 3 ? "Funded" : `Фаза ${x.phase}`}{totalOf.get(x.key) != null ? <> · результат <span className={cls(totalOf.get(x.key)!)}>{sg(totalOf.get(x.key)!)}%</span></> : null}</span>
             <div className="why">{x.ins.why.map(w => <span key={w.t} className={w.lv}>{w.t}</span>)}</div></div>
           <span className="num">{x.ins.score != null ? `балл ${x.ins.score}` : ""}</span>
         </Link>))}</div> : <p className="fine" style={{ margin: 0 }}>Сейчас никому не нужна срочная помощь.</p>}

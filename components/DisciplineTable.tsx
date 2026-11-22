@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 
-export type DRow = { uid: string; name: string; phase: number; n: number; score: number | null; risk: number | null; cv: number | null; slPct: number | null; avgR: number | null; lotUpPct: number | null; planPct: number | null; journalPct: number | null; res: number | null };
+export type DRow = { key: string; uid: string; name: string; phase: number; n: number; score: number | null; risk: number | null; cv: number | null; slPct: number | null; avgR: number | null; lotUpPct: number | null; planPct: number | null; journalPct: number | null; res: number | null };
 const COLS: [keyof DRow, string][] = [["name", "Трейдер"], ["score", "Балл"], ["n", "Сделок"], ["risk", "Риск / сделку"], ["cv", "Разброс риска"], ["slPct", "Со стопом"], ["avgR", "Средний R"], ["lotUpPct", "Лот после стопа ↑"], ["planPct", "По плану"], ["journalPct", "Дневник"], ["res", "Результат"]];
 const dash = <span className="fine">—</span>;
 
@@ -23,7 +23,7 @@ export default function DisciplineTable({ rows }: { rows: DRow[] }) {
         <th key={c} className={c === "name" ? "" : "n"} aria-sort={k === c ? (dir < 0 ? "descending" : "ascending") : undefined}>
           <button type="button" className="thbtn" onClick={() => { if (k === c) setDir(-dir); else { setK(c); setDir(c === "name" ? 1 : -1); } }}>{l}{k === c ? (dir < 0 ? " ↓" : " ↑") : ""}</button></th>))}
     </tr></thead><tbody>{sorted.map(r => (
-      <tr key={r.uid} style={{ cursor: "default" }}>
+      <tr key={r.key} style={{ cursor: "default" }}>
         <td className="who"><Link prefetch={false} href={`/admin/trader/${r.uid}`} style={{ color: "inherit", textDecoration: "none" }}><b>{r.name}</b></Link><span>Фаза {r.phase === 3 ? "Funded" : r.phase}</span></td>
         <td className="n">{r.score == null ? dash : <span className="score">{r.score}<i><b style={{ width: `${r.score}%`, background: `var(--${tone(r.score)})` }} /></i></span>}</td>
         <td className="n">{r.n || dash}</td>
