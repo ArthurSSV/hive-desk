@@ -40,9 +40,13 @@ export default async function Summary({ searchParams }: { searchParams: { day?: 
   );
   const P = S.period, sum = S.sum, day = P === "day";
   const href = (p: Period, d = S.anchor) => `/admin/summary?period=${p}&day=${d}${scopeQ}`;
-  const best = S.traders.find(t => (t.pnl ?? 0) > 0);
-  const worst = [...S.traders].reverse().find(t => (t.pnl ?? 0) < 0);
-  const attention = S.traders.filter(t => t.zone === "red" || t.zone === "yellow");
+  // По людям: у трейдера со старым и новым счётом — общий итог, зона по текущему счёту
+  type Pp = { name: string; pnl: number | null; pct: number | null; main: { zone: string } };
+  const ppl = (((S as any).people || []) as Pp[]).filter(x => x.pct != null).sort((a, b) => b.pct! - a.pct!);
+  const bp = ppl.find(x => x.pnl! > 0), wp = [...ppl].reverse().find(x => x.pnl! < 0);
+  const best = bp ? { name: bp.name, pnlPct: bp.pct } : undefined;
+  const worst = wp ? { name: wp.name, pnlPct: wp.pct } : undefined;
+  const attention = (((S as any).people || []) as Pp[]).filter(x => x.main.zone === "red" || x.main.zone === "yellow").map(x => ({ name: x.name, zone: x.main.zone as keyof typeof LEVEL_LABEL }));
   const titleFor = day ? `за ${S.label.short}` : P === "all" ? "за всё время" : P === "range" ? `за ${S.label.short}` : `${FOR[P]} ${S.label.short}`;
   const rangeQ = `/admin/summary?x=1${scopeQ}`;
   const year = S.end.slice(0, 4);
@@ -231,7 +235,8 @@ export default async function Summary({ searchParams }: { searchParams: { day?: 
       </>}
   </>);
   const GI = noDays ? null : await groupInsights(sb, (S as any).accs || [], S.start, S.end, (S as any).allDays || [], S.rules);
-  const live = (GI?.people || []).filter(x => !x.failed);
+  // Риск-радар и «Дисциплина» — только живые счета; архивные остаются в «Воронке»
+  const live = (GI?.people || []).filter(x => !x.failed && !x.archived);
   const radar = live.filter(x => x.ins.why.length).sort((a, b) => Number(b.ins.urgent) - Number(a.ins.urgent) || b.ins.why.filter(w => w.lv === "r").length - a.ins.why.filter(w => w.lv === "r").length || b.ins.why.length - a.ins.why.length);
   const urgentN = radar.filter(x => x.ins.urgent).length;
   const totalOf = new Map(S.traders.map(t => [t.key, t.total]));

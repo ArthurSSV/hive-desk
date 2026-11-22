@@ -132,7 +132,7 @@ export async function summaryBundle(sb: SupabaseClient, opts: { day?: string; pe
   // Участники: текущий счёт каждого трейдера плюс счета из архива — их история остаётся в прошлых днях
   const everyone: { p: any; acc: Account | null }[] = (profiles || []).flatMap((p: any) => {
     const accs = byUser.get(p.id) || [], cur = currentAccount(accs);
-    return [...(cur ? [{ p, acc: cur }] : []), ...accs.filter(a => isArchived(a) && a.id !== cur?.id).map(acc => ({ p: cur ? { ...p, name: `${p.name} (архив)` } : p, acc }))];
+    return [...(cur ? [{ p, acc: cur }] : []), ...accs.filter(a => isArchived(a) && a.id !== cur?.id).map(acc => ({ p, acc }))];
   });
   const allMembers = everyone.filter(m => m.acc && m.acc.initial_balance) as Member[];
   const ids = allMembers.map(m => m.acc.id);
@@ -177,9 +177,10 @@ export async function summaryBundle(sb: SupabaseClient, opts: { day?: string; pe
   const span = (a: string, b: string) => (a === b ? dm(a) : `${dm(a)}–${dm(b)}`);
   const mondayOf = (d: string) => { const x = new Date(d + "T12:00:00Z"); x.setUTCDate(x.getUTCDate() - ((x.getUTCDay() + 6) % 7)); return x.toISOString().slice(0, 10); };
   const teamName = (id: number | null) => (id ? teams.find((t: any) => t.id === id)?.name ?? null : null);
-  const top5 = (s: string, e: string): TopRow[] => aggregate(alive(members, s), rowsByAcc, rules, period, s, e).traders
-    .filter(t => !t.failed && t.pnl != null && t.pnl > 0 && t.pnlPct != null)
-    .slice(0, 5).map(t => ({ name: t.name, team: teamName(t.team), pct: t.pnlPct!, pnl: t.pnl!, trades: t.trades }));
+  const top5 = (s: string, e: string): TopRow[] => aggregate(alive(members, s), rowsByAcc, rules, period, s, e).people
+    .filter(x => !x.main.failed && x.pnl != null && x.pnl > 0 && x.pct != null)
+    .sort((a, b) => b.pct! - a.pct!)
+    .slice(0, 5).map(x => ({ name: x.name, team: teamName(x.team), pct: x.pct!, pnl: x.pnl!, trades: x.trades }));
   function topsFor(s: string, e: string, best: Record<string, { name: string; pct: number }>): TopBox[] {
     const ws = allDays.find(d => d >= mondayOf(e)) || e;
     if (period === "day") return [{ title: "Топ-5 дня", sub: dm(e), rows: top5(e, e) }, { title: "Топ-5 недели", sub: span(ws, e), rows: top5(ws, e) }];
@@ -235,16 +236,26 @@ export async function summaryBundle(sb: SupabaseClient, opts: { day?: string; pe
 }
 
 /** Итоги набора счетов за период [start, end]. */
-function aggregate(members: Member[], rowsByAcc: Map<number, any[]>, rules: ReturnType<typeof normalizeRules>, period: Period, start: string, end: string) {
-  const capital = members.reduce((a, m) => a + Number(m.acc.initial_balance), 0);
-  const balance = members.reduce((a, m) => a + Number(m.acc.balance ?? m.acc.initial_balance), 0);
+export function aggregate(members: Member[], rowsByAcc: Map<number, any[]>, rules: ReturnType<typeof normalizeRules>, period: Period, start: string, end: string) {
+  // Человек = профиль. У трейдера может быть старый счёт (в архиве) и новый — в людях, капитале,
+  // плюс/минус, зонах и топе он считается один раз; основной счёт — не архивный (иначе последний).
+  const byPerson = new Map<string, Member[]>();
+  for (const m of members) { const k = m.p.id as string; if (!byPerson.has(k)) byPerson.set(k, []); byPerson.get(k)!.push(m); }
+  const primaryOf = (ms: Member[]) => ms.find(m => !isArchived(m.acc)) || ms.reduce((a, b) => (b.acc.id > a.acc.id ? b : a));
+  const persons = [...byPerson.entries()].map(([id, ms]) => ({ id, ms, main: primaryOf(ms) }));
+  const capital = persons.reduce((a, x) => a + Number(x.main.acc.initial_balance), 0);
+  const balance = persons.reduce((a, x) => a + Number(x.main.acc.balance ?? x.main.acc.initial_balance), 0);
   type DayAgg = { day: string; pnl: number; trades: number; plus: number; minus: number; cum: number; cumPct: number; pct: number };
   const map = new Map<string, DayAgg>();
+  const dayPerson = new Map<string, Map<string, number>>(); // день → человек → итог дня (по всем его счетам)
   for (const m of members) for (const r of rowsByAcc.get(m.acc.id) || []) {
     if (!map.has(r.day)) map.set(r.day, { day: r.day, pnl: 0, trades: 0, plus: 0, minus: 0, cum: 0, cumPct: 0, pct: 0 });
     const d = map.get(r.day)!, pnl = Number(r.pnl);
-    d.pnl += pnl; d.trades += r.trades; if (pnl > 0) d.plus++; else if (pnl < 0) d.minus++;
+    d.pnl += pnl; d.trades += r.trades;
+    if (!dayPerson.has(r.day)) dayPerson.set(r.day, new Map());
+    const dp = dayPerson.get(r.day)!; dp.set(m.p.id, (dp.get(m.p.id) || 0) + pnl);
   }
+  for (const [day, dp] of dayPerson) { const d = map.get(day)!; for (const v of dp.values()) { if (v > 0) d.plus++; else if (v < 0) d.minus++; } }
   const days = [...map.values()].sort((a, b) => a.day.localeCompare(b.day));
   let cum = 0;
   for (const d of days) { cum += d.pnl; d.cum = cum; d.cumPct = capital ? (cum / capital) * 100 : 0; d.pct = capital ? (d.pnl / capital) * 100 : 0; }
@@ -252,6 +263,7 @@ function aggregate(members: Member[], rowsByAcc: Map<number, any[]>, rules: Retu
   const upTo = days.filter(d => d.day <= end);
   const endDay = upTo[upTo.length - 1];
 
+  const several = new Set(persons.filter(x => x.ms.length > 1).map(x => x.id));
   const traders = members.map(({ p, acc }) => {
     const all = rowsByAcc.get(acc.id) || [];
     const own = all.filter(r => r.day >= start && r.day <= end);
@@ -264,7 +276,10 @@ function aggregate(members: Member[], rowsByAcc: Map<number, any[]>, rules: Retu
     const failDay = acc.status === "failed" ? (all.find(r => r.breach)?.day as string | undefined) ?? ((acc as any).status_day ? String((acc as any).status_day) : null) : null;
     return {
       // id — профиль (для ссылок), key — счёт: у трейдера может быть текущий счёт и счёт в архиве
-      id: p.id as string, key: `${p.id}-${acc.id}`, name: p.name as string, team: p.team_id as number | null, phase: acc.phase, failed: failedBy, failDay, size,
+      id: p.id as string, key: `${p.id}-${acc.id}`, accId: acc.id as number, person: p.name as string,
+      // Пометка нужна, только когда в периоде есть и старый, и новый счёт человека
+      name: several.has(p.id) && isArchived(acc) ? `${p.name} · старый счёт` : (p.name as string),
+      team: p.team_id as number | null, phase: acc.phase, failed: failedBy, failDay, size,
       pnl: own.length ? pnl : null, pnlPct: own.length ? (pnl / size) * 100 : null,
       total: endRow ? Number(endRow.total_pct) : null, trades: own.reduce((a, r) => a + r.trades, 0),
       plusDays: own.filter(r => Number(r.pnl) > 0).length, minusDays: own.filter(r => Number(r.pnl) < 0).length,
@@ -273,22 +288,30 @@ function aggregate(members: Member[], rowsByAcc: Map<number, any[]>, rules: Retu
   }).sort((a, b) => (b.pnlPct ?? -1e12) - (a.pnlPct ?? -1e12));
 
   const pnl = inP.reduce((a, d) => a + d.pnl, 0);
+  // Люди за период: итог по всем их счетам, зона и этап — по основному счёту
+  const tByAcc = new Map(traders.map(t => [t.accId, t]));
+  const people = persons.map(({ id, ms, main }) => {
+    const ts = ms.map(m => tByAcc.get(m.acc.id)!), mt = tByAcc.get(main.acc.id)!;
+    const has = ts.some(t => t.pnl != null), pnl = ts.reduce((a, t) => a + (t.pnl ?? 0), 0);
+    return { id, name: main.p.name as string, team: main.p.team_id as number | null, main: mt, size: mt.size,
+      pnl: has ? pnl : null, pct: has ? (pnl / mt.size) * 100 : null, trades: ts.reduce((a, t) => a + t.trades, 0) };
+  });
   const zones = { green: 0, work: 0, yellow: 0, red: 0, failed: 0 } as Record<string, number>;
-  for (const t of traders) if (t.zone in zones) zones[t.zone]++;
+  for (const x of people) if (x.main.zone in zones) zones[x.main.zone]++;
   const phases = { p1: 0, p2: 0, funded: 0, failed: 0 };
-  for (const t of traders) { if (t.failed) phases.failed++; else if (t.phase === 1) phases.p1++; else if (t.phase === 2) phases.p2++; else phases.funded++; }
-  const plus = traders.filter(t => (t.pnl ?? 0) > 0).length, minus = traders.filter(t => (t.pnl ?? 0) < 0).length;
+  for (const x of people) { const t = x.main; if (t.failed) phases.failed++; else if (t.phase === 1) phases.p1++; else if (t.phase === 2) phases.p2++; else phases.funded++; }
+  const plus = people.filter(x => (x.pnl ?? 0) > 0).length, minus = people.filter(x => (x.pnl ?? 0) < 0).length;
   const sortedDays = [...inP].sort((a, b) => b.pnl - a.pnl);
   // Вылетели в этом периоде и по дням
   const failedByDay: Record<string, string[]> = {};
-  for (const t of traders) if (t.failDay && t.failDay >= start && t.failDay <= end) (failedByDay[t.failDay] ||= []).push(t.name);
+  for (const t of traders) if (t.failDay && t.failDay >= start && t.failDay <= end) (failedByDay[t.failDay] ||= []).push(t.person);
   const failedIn = Object.values(failedByDay).reduce((a, x) => a + x.length, 0);
   // Лучший трейдер каждого дня периода — для коллажа недели
   const bestByDay: Record<string, { name: string; pct: number }> = {};
-  for (const m of members) for (const r of rowsByAcc.get(m.acc.id) || []) {
-    if (r.day < start || r.day > end) continue;
-    const pct = (Number(r.pnl) / Number(m.acc.initial_balance)) * 100;
-    if (pct > 0 && (!bestByDay[r.day] || pct > bestByDay[r.day].pct)) bestByDay[r.day] = { name: m.p.name, pct };
+  const sizeOf = new Map(people.map(x => [x.id, x.size])), nameOf = new Map(people.map(x => [x.id, x.name]));
+  for (const [day, dp] of dayPerson) {
+    if (day < start || day > end) continue;
+    for (const [id, v] of dp) { const pct = (v / sizeOf.get(id)!) * 100; if (pct > 0 && (!bestByDay[day] || pct > bestByDay[day].pct)) bestByDay[day] = { name: nameOf.get(id)!, pct }; }
   }
 
   const endIdx = upTo.length - 1;
@@ -298,13 +321,13 @@ function aggregate(members: Member[], rowsByAcc: Map<number, any[]>, rules: Retu
   const table = period === "day" ? upTo.slice(Math.max(0, endIdx - 13)) : inP;
 
   return {
-    capital, balance, count: members.length,
+    capital, balance, count: people.length,
     sum: {
       pnl, pct: capital ? (pnl / capital) * 100 : 0, cum: endDay?.cum ?? 0, cumPct: endDay?.cumPct ?? 0, trades: inP.reduce((a, d) => a + d.trades, 0),
-      plus, minus, flat: members.length - plus - minus, tradingDays: inP.length,
+      plus, minus, flat: people.length - plus - minus, tradingDays: inP.length,
       bestDay: inP.length > 1 ? sortedDays[0] : null, worstDay: inP.length > 1 ? sortedDays[sortedDays.length - 1] : null,
     },
-    zones, phases, traders, chart, table: [...table].reverse(), bestByDay, failedByDay, failedIn,
+    zones, phases, traders, people, chart, table: [...table].reverse(), bestByDay, failedByDay, failedIn,
   };
 }
 
@@ -337,7 +360,7 @@ export async function groupInsights(sb: SupabaseClient, accs: { uid: string; nam
     const reason = !failed ? null : (acc as any).manual_failed ? "manual" : breach === "daily" ? "daily" : breach === "max" ? "max" : "signal";
     const fDay = failed ? String((acc as any).status_day || "") : "";
     const life = failed && fDay ? allDays.filter(d => d >= String(acc.created_at).slice(0, 10) && d <= fDay).length : null;
-    return { uid, key: `${uid}-${acc.id}`, accId: acc.id as number, name, phase: acc.phase, failed, reason, life, ins };
+    return { uid, key: `${uid}-${acc.id}`, accId: acc.id as number, archived: isArchived(acc), name, phase: acc.phase, failed, reason, life, ins };
   });
   // Сделки периода для общей аналитики: каждая помечена трейдером и размером его счёта
   const initOf = new Map(accs.map(a => [a.acc.id, Number(a.acc.initial_balance)])), whoOf = new Map(accs.map(a => [a.acc.id, a.uid]));
