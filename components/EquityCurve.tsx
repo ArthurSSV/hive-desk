@@ -3,7 +3,7 @@
 // зелёный выше старта и красный ниже, переключатели «% / $» и масштаба, цель и лимит видны всегда.
 import { useEffect, useId, useMemo, useState } from "react";
 
-type Deal = { exec_ts: string; symbol: string | null; net_profit: number; is_close: boolean };
+type Deal = { exec_ts: string; symbol: string | null; net_profit: number; is_close: boolean; position_id?: number | null; deal_id?: number | string };
 type Props = {
   deals: Deal[]; initial: number; totalPct: number; target: number | null; max: number; tz: string;
   stats: { winRate: number; tradingDays: number; best: number; worst: number };
@@ -21,14 +21,22 @@ export default function EquityCurve({ deals, initial: init, totalPct, target, ma
   const save = (k: string, v: string) => { try { localStorage.setItem(k, v); } catch { /* без памяти */ } };
 
   const pts = useMemo(() => {
-    const closed = deals.filter(d => d.is_close).sort((a, b) => a.exec_ts.localeCompare(b.exec_ts));
+    // Точка на сделку (позицию): частичные закрытия складываются, время — последнего закрытия
+    const byPos = new Map<string, { exec_ts: string; symbol: string | null; net_profit: number; parts: number }>();
+    for (const d of deals) {
+      if (!d.is_close) continue;
+      const k = d.position_id != null ? `p${d.position_id}` : `d${d.deal_id ?? d.exec_ts}`, c = byPos.get(k);
+      if (!c) byPos.set(k, { exec_ts: d.exec_ts, symbol: d.symbol, net_profit: Number(d.net_profit || 0), parts: 1 });
+      else { c.net_profit += Number(d.net_profit || 0); c.parts++; if (d.exec_ts > c.exec_ts) c.exec_ts = d.exec_ts; }
+    }
+    const closed = [...byPos.values()].sort((a, b) => a.exec_ts.localeCompare(b.exec_ts));
     const day = new Intl.DateTimeFormat("ru-RU", { timeZone: tz, day: "2-digit", month: "2-digit" });
     const time = new Intl.DateTimeFormat("ru-RU", { timeZone: tz, day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
     // Если история длиннее загруженной — начинаем не с нуля, а с накопленного до неё результата
     let bal = (totalPct / 100) * init - closed.reduce((a, d) => a + Number(d.net_profit || 0), 0);
     if (Math.abs(bal) < 0.005) bal = 0;
-    const out: { pct: number; bal: number; date: string; when?: string; sym?: string | null; pnl?: number }[] = [{ pct: (bal / init) * 100, bal: init + bal, date: closed[0] ? day.format(new Date(closed[0].exec_ts)) : "" }];
-    for (const d of closed) { bal += Number(d.net_profit || 0); const t = new Date(d.exec_ts); out.push({ pct: (bal / init) * 100, bal: init + bal, date: day.format(t), when: time.format(t), sym: d.symbol, pnl: Number(d.net_profit || 0) }); }
+    const out: { pct: number; bal: number; date: string; when?: string; sym?: string | null; pnl?: number; parts?: number }[] = [{ pct: (bal / init) * 100, bal: init + bal, date: closed[0] ? day.format(new Date(closed[0].exec_ts)) : "" }];
+    for (const d of closed) { bal += Number(d.net_profit || 0); const t = new Date(d.exec_ts); out.push({ pct: (bal / init) * 100, bal: init + bal, date: day.format(t), when: time.format(t), sym: d.symbol, pnl: Number(d.net_profit || 0), parts: d.parts }); }
     return out;
   }, [deals, init, totalPct, tz]);
 
@@ -88,7 +96,7 @@ export default function EquityCurve({ deals, initial: init, totalPct, target, ma
             <div className="eqtip" style={{ left: `${Math.max(16, Math.min(84, (x(hi!) / W) * 100))}%`, top: `${(y(h.pct) / H) * 100}%`, transform: `translate(-50%, ${y(h.pct) < 110 ? "14px" : "calc(-100% - 12px)"})` }}>
               {h.pnl == null ? <><b>Старт</b><span className="mono">{money(h.bal)}</span></> : <>
                 <b>{h.when} · {h.sym || "—"}</b>
-                <span className={`mono ${h.pnl >= 0 ? "pos" : "neg"}`}>сделка {sgn(h.pnl)}{unit === "usd" ? money(h.pnl) : `${Math.abs((h.pnl / init) * 100).toFixed(2)}%`}</span><br />
+                <span className={`mono ${h.pnl >= 0 ? "pos" : "neg"}`}>сделка{h.parts && h.parts > 1 ? ` (${h.parts} ${h.parts < 5 ? "части" : "частей"})` : ""} {sgn(h.pnl)}{unit === "usd" ? money(h.pnl) : `${Math.abs((h.pnl / init) * 100).toFixed(2)}%`}</span><br />
                 <span className="mono">баланс {money(h.bal)} · {sgn(h.pct)}{Math.abs(h.pct).toFixed(2)}%</span></>}
             </div>)}
         </div>)}

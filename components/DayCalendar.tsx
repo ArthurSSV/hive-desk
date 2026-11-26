@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { dayKey } from "@/lib/engine";
 import { openDay } from "./CabinetTabs";
 
-type Deal = { exec_ts: string; net_profit: number; is_close: boolean };
+type Deal = { exec_ts: string; net_profit: number; is_close: boolean; position_id?: number | null; deal_id?: number | string };
 const MON = ["Январь", "Февраль", "Март", "Апрель", "Май", "Июнь", "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"];
 const cls = (v: number) => (v > 0 ? "pos" : v < 0 ? "neg" : "");
 const sgn = (v: number) => (v > 0 ? "+" : v < 0 ? "−" : "");
@@ -12,7 +12,16 @@ const sgn = (v: number) => (v > 0 ? "+" : v < 0 ? "−" : "");
 export default function DayCalendar({ deals, initial, dayTz, today }: { deals: Deal[]; initial: number; dayTz: string; today: string }) {
   const [unit, setUnit] = useState<"usd" | "pct">("usd");
   const [ym, setYm] = useState<[number, number]>([Number(today.slice(0, 4)), Number(today.slice(5, 7)) - 1]);
-  const closed = useMemo(() => deals.filter(d => d.is_close).map(d => ({ day: dayKey(new Date(d.exec_ts), dayTz), pnl: Number(d.net_profit || 0) })), [deals, dayTz]);
+  // Сделка = позиция: все её закрытия за день (TP1, TP2, стоп — «сейфы») складываются в одну сделку дня закрытия
+  const closed = useMemo(() => {
+    const m = new Map<string, { day: string; pnl: number }>();
+    for (const d of deals) {
+      if (!d.is_close) continue;
+      const day = dayKey(new Date(d.exec_ts), dayTz), k = `${day}|${d.position_id ?? "d" + (d.deal_id ?? d.exec_ts)}`;
+      const c = m.get(k) || { day, pnl: 0 }; c.pnl += Number(d.net_profit || 0); m.set(k, c);
+    }
+    return [...m.values()];
+  }, [deals, dayTz]);
   const byDay = useMemo(() => { const m = new Map<string, { pnl: number; n: number }>(); for (const d of closed) { const c = m.get(d.day) || { pnl: 0, n: 0 }; c.pnl += d.pnl; c.n++; m.set(d.day, c); } return m; }, [closed]);
   const fmt = (v: number, short = true) => unit === "pct" ? `${sgn(v)}${Math.abs(initial ? (v / initial) * 100 : 0).toFixed(2)}%` : `${sgn(v)}$${Math.abs(v).toLocaleString("en-US", { maximumFractionDigits: short ? 0 : 2, minimumFractionDigits: short ? 0 : 2 })}`;
   const [Y, M] = ym, key = (dt: Date) => dt.toISOString().slice(0, 10), mk = `${Y}-${String(M + 1).padStart(2, "0")}`;

@@ -59,14 +59,27 @@ export default function TraderView({ b, mode, journalDay, journalSaved, journalE
   const lateNote = (j: any) => `заполнено ${fmtD(dayKey(new Date(j.updated_at), R.tz))}`;
 
 
-  const lastDeals = (() => {
-    const opens = new Map<number, any>();
-    for (const d of b.deals as any[]) if (!d.is_close && d.position_id != null) { const o = opens.get(d.position_id); if (!o || o.exec_ts > d.exec_ts) opens.set(d.position_id, d); }
-    return (b.deals as any[]).filter(d => d.is_close).sort((x, y) => y.exec_ts.localeCompare(x.exec_ts)).slice(0, 8).map(d => { const o = d.position_id != null ? opens.get(d.position_id) : null; return { d, o, side: o?.side || (d.side === "buy" ? "sell" : "buy") }; });
+  // Последние сделки — по позициям: части (TP1, TP2, стоп) складываются в одну строку
+  const positions = (() => {
+    const by = new Map<string, { k: string; o: any; closes: any[] }>();
+    for (const d of b.deals as any[]) {
+      const k = d.position_id != null ? `p${d.position_id}` : `d${d.deal_id}`;
+      const g = by.get(k) || { k, o: null, closes: [] };
+      if (!d.is_close) { if (!g.o || g.o.exec_ts > d.exec_ts) g.o = d; } else g.closes.push(d);
+      by.set(k, g);
+    }
+    return [...by.values()].filter(g => g.closes.length).map(g => {
+      const cs = g.closes.sort((x: any, y: any) => x.exec_ts.localeCompare(y.exec_ts)), last = cs[cs.length - 1];
+      const lots = cs.reduce((a: number, d: any) => a + Number(d.lots || 0), 0);
+      const exit = lots ? cs.reduce((a: number, d: any) => a + Number(d.price) * Number(d.lots || 0), 0) / lots : Number(last.price);
+      return { k: g.k, o: g.o, sym: last.symbol, side: g.o?.side || (last.side === "buy" ? "sell" : "buy"), lots, parts: cs.length,
+        pnl: cs.reduce((a: number, d: any) => a + Number(d.net_profit), 0), entry: last.entry_price ?? g.o?.price, exit, ts: last.exec_ts };
+    }).sort((x, y) => y.ts.localeCompare(x.ts));
   })();
+  const lastDeals = positions.slice(0, 8);
   const pxs = (v: any) => (v == null ? "—" : Number(v).toLocaleString("en-US", { maximumFractionDigits: 2 }));
   const dts = (iso: string) => new Date(iso).toLocaleString("ru-RU", { timeZone: vtz, day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
-  const closedCount = (b.deals as any[]).filter(d => d.is_close).length;
+  const closedCount = positions.length; // закрытых сделок (позиций), а не частей
   const todayOpen = jDays.includes(today), needJournal = self && !failed && todayOpen && !notesById.has(today);
 
   const dashboard = (
@@ -92,10 +105,10 @@ export default function TraderView({ b, mode, journalDay, journalSaved, journalE
         <DayCalendar deals={b.deals} initial={init} dayTz={R.tz} today={today} />
       </div>
       <section className="panel"><div className="ph"><h2>Последние сделки</h2><TabLink to="deals">Все сделки →</TabLink></div>
-        {lastDeals.length ? <div className="last">{lastDeals.map(({ d, o, side }) => { const pnl = Number(d.net_profit), pc = init ? (pnl / init) * 100 : 0; return (
-          <div key={d.deal_id}><span className={`side ${side} s`}>{side === "buy" ? "BUY" : "SELL"}</span><span><b>{d.symbol || "—"}</b> <span className="lot">{d.lots != null ? Number(d.lots).toFixed(2) : "—"} лот</span></span>
-            <span className={`p ${cls(pnl)}`}>{pnl < 0 ? "-" : "+"}${Math.abs(pnl).toFixed(2)}</span>
-            <span className="m">{dts(o?.exec_ts || d.exec_ts)} · {pxs(d.entry_price ?? o?.price)} → {pxs(d.price)}</span><span className={`pp ${cls(pnl)}`}>{sg(pc)}%</span></div>); })}</div>
+        {lastDeals.length ? <div className="last">{lastDeals.map(x => { const pc = init ? (x.pnl / init) * 100 : 0; return (
+          <div key={x.k}><span className={`side ${x.side} s`}>{x.side === "buy" ? "BUY" : "SELL"}</span><span><b>{x.sym || "—"}</b> <span className="lot">{x.lots ? x.lots.toFixed(2) : "—"} лот{x.parts > 1 ? ` · ${x.parts} ${x.parts < 5 ? "части" : "частей"}` : ""}</span></span>
+            <span className={`p ${cls(x.pnl)}`}>{x.pnl < 0 ? "-" : "+"}${Math.abs(x.pnl).toFixed(2)}</span>
+            <span className="m">{dts(x.o?.exec_ts || x.ts)} · {pxs(x.entry)} → {pxs(x.exit)}</span><span className={`pp ${cls(x.pnl)}`}>{sg(pc)}%</span></div>); })}</div>
           : <p className="fine" style={{ margin: 0 }}>Закрытых сделок пока нет.</p>}
       </section>
       <section className="panel"><div className="ph"><h2>История по дням</h2></div>
