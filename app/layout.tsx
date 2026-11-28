@@ -1,4 +1,6 @@
 import "./globals.css";
+import { FxPill } from "@/components/FxDay";
+import { viewerTz } from "@/lib/tz";
 import Link from "next/link";
 import type { Metadata } from "next";
 import { userClient } from "@/lib/supabase";
@@ -39,6 +41,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               <span className="ic" aria-hidden="true"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 4v11" /><path d="m7 10 5 5 5-5" /><path d="M5 20h14" /></svg></span>
               <span><b>{guide.title}</b><small>PDF{guide.note ? ` · ${guide.note}` : ""}</small></span>
             </a>)}
+          {user && <FxPill tz={viewerTz()} />}
           {user && (
             <nav className="tabs" aria-label="Разделы">
               {admin && <Link prefetch={false} href="/admin">Группа</Link>}

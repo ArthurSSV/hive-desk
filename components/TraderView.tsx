@@ -9,6 +9,7 @@ import EquityCurve from "./EquityCurve";
 import DayCalendar from "./DayCalendar";
 import Analytics from "./Analytics";
 import CabinetTabs, { TabLink } from "./CabinetTabs";
+import FxDay, { FxTabDot } from "./FxDay";
 import { ACCESS_LABEL } from "@/lib/access";
 import { viewerTz, tzLabel } from "@/lib/tz";
 
@@ -171,6 +172,7 @@ export default function TraderView({ b, mode, journalDay, journalSaved, journalE
         { id: "deals", label: "Сделки", count: closedCount, node: <DealsHistory deals={b.deals} login={acc.trader_login || acc.ctid_trader_account_id} initial={init} accountId={acc.id} tz={vtz} dayTz={R.tz} /> },
         { id: "analytics", label: "Аналитика", node: <Analytics deals={b.deals as any} initial={init} tz={vtz} meta={(b as any).meta} /> },
         { id: "journal", label: "Дневник", dot: needJournal, dotTitle: "Сегодня ещё не заполнен", node: journalTab },
+        { id: "fxday", label: <>Торговый день<FxTabDot /></>, node: <FxDay tz={vtz} /> },
       ]} />
     </>
   );

@@ -3,7 +3,7 @@
 // так формы и таблицы не теряют состояние при переключении.
 import { useEffect, useState } from "react";
 
-export type Tab = { id: string; label: string; count?: number; countRed?: boolean; dot?: boolean; dotTitle?: string; node: React.ReactNode };
+export type Tab = { id: string; label: React.ReactNode; count?: number; countRed?: boolean; dot?: boolean; dotTitle?: string; node: React.ReactNode };
 
 /** Открыть вкладку из любого места страницы (календарь, «Все сделки»). */
 export const openTab = (id: string) => window.dispatchEvent(new CustomEvent("cab:tab", { detail: id }));
